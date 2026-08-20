@@ -791,24 +791,41 @@
             }
         }
 
-        // 搜索框包裹 + 在线按钮并入同一行（对齐、尺寸协调）
+        // 搜索框包裹 + 在线按钮并入同一行（对齐、尺寸协调；幂等健壮）
+        // 兼容：input 已在 wrap / 未在 wrap / 清理摘类后嵌套 wrap 等任意历史结构
         const searchInput = document.getElementById('LC-Message-SenderSearchInput');
         if (searchInput) {
-            const sc = searchInput.parentElement;
-            let wrap = (sc && sc.classList.contains('lc-search-wrap')) ? sc : null;
+            // 找到或创建 wrap
+            let wrap = searchInput.closest('.lc-search-wrap');
             if (!wrap) {
                 wrap = document.createElement('div');
                 wrap.className = 'lc-search-wrap';
-                searchInput.parentElement.insertBefore(wrap, searchInput);
+                const par = searchInput.parentElement;
+                par.insertBefore(wrap, searchInput);
                 wrap.appendChild(searchInput);
             }
-            // 把在线按钮（lc-online-btn）也移进 wrap，与输入框同一行
-            if (sc && sc !== wrap) {
-                const btn = [].slice.call(sc.children).find(function (c) { return c.classList && c.classList.contains('lc-online-btn'); });
+            // 向上找「含 BUTTON 兄弟」的容器（跳过 wrap 本身，防误判）
+            let container = null;
+            let el = searchInput.parentElement;
+            while (el && el !== document.body) {
+                const isWrap = el.classList && el.classList.contains('lc-search-wrap');
+                if (!isWrap) {
+                    const hasBtn = [].slice.call(el.children).some(function (c) { return c.tagName === 'BUTTON' && c !== searchInput && c !== wrap; });
+                    if (hasBtn) { container = el; break; }
+                }
+                el = el.parentElement;
+            }
+            // 把在线按钮（按 tagName 找，不依赖类名）移进 wrap 同排
+            if (container) {
+                const btn = [].slice.call(container.children).find(function (c) { return c !== wrap && c.tagName === 'BUTTON'; });
                 if (btn) wrap.appendChild(btn);
-                sc.style.borderBottom = '';
-                sc.style.marginBottom = '';
-                sc.style.gap = '0';
+                container.style.borderBottom = '';
+                container.style.marginBottom = '';
+                container.style.gap = '0';
+            }
+            // wrap 若嵌在旧 wrap 里，提到 container 下第一个（container 不能是 wrap 自身）
+            if (container && container !== wrap && wrap.parentElement !== container) {
+                container.insertBefore(wrap, container.firstChild);
             }
         }
 
@@ -1172,7 +1189,7 @@
             '#LC-Message-SenderList .lc-search-wrap{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--seam);margin-bottom:6px}',
             '#LC-Message-SenderList .lc-search-wrap input{flex:1;min-width:0;height:34px;padding:0 10px;border:1px solid var(--seam);border-radius:10px;background:var(--bg-sink);color:var(--ink);box-sizing:border-box;font-family:var(--lc-font);font-size:13px;outline:none;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}',
             '#LC-Message-SenderList .lc-search-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}',
-            '#LC-Message-SenderList .lc-online-btn{height:34px;min-width:44px;padding:0 8px;border:none;border-radius:10px;background:linear-gradient(180deg,var(--accent),var(--accent-dn));color:var(--btn-label)!important;cursor:pointer;flex:none;display:inline-flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:filter .15s var(--ease),transform .15s var(--ease),box-shadow .15s var(--ease)}',
+            '#LC-Message-SenderList .lc-online-btn{height:34px;min-width:44px;padding:0 8px;border:none;border-radius:10px;background:var(--accent);color:var(--btn-label)!important;cursor:pointer;flex:none;display:inline-flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 6px rgba(0,0,0,.18);transition:filter .15s var(--ease),transform .15s var(--ease),box-shadow .15s var(--ease)}',
             '#LC-Message-SenderList .lc-online-btn:hover{filter:brightness(1.1);box-shadow:0 3px 10px rgba(0,0,0,.25)}',
             '#LC-Message-SenderList .lc-online-btn:active{transform:scale(.94)}',
             '#LC-Message-SenderList .lc-online-btn .lc-online-count{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--btn-label);color:var(--accent);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}',
