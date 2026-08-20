@@ -1128,18 +1128,29 @@
             '.lc-add-sender .search-container>div:nth-of-type(1) button[style*="rgb(255, 255, 255)"]{background:transparent!important;color:var(--ink-2)!important}',
             '.lc-add-sender .search-container>div:nth-of-type(1) button:hover{background:var(--bg-sink)!important;color:var(--ink)!important}',
 
-            /* === 在线人数按钮（lc-online-btn，SVG 人像 + 数字）=== */
-            '.lc-online-btn{width:36px;height:36px;border:1px solid var(--seam);border-radius:10px;background:var(--card);color:var(--ink-2);cursor:pointer;flex:none;transition:background .15s var(--ease),color .15s var(--ease),transform .15s var(--ease)}',
-            '.lc-online-btn:hover{background:var(--accent-soft);color:var(--accent)}',
+            /* === 在线人数按钮（lc-online-btn，SVG 人像 + 数字胶囊徽标）=== */
+            '.lc-online-btn{width:40px;height:36px;border:1px solid var(--hairline);border-radius:12px;background:linear-gradient(180deg,var(--card),var(--bg-sink));color:var(--accent);cursor:pointer;flex:none;box-shadow:var(--shadow-inset);transition:background .15s var(--ease),color .15s var(--ease),transform .15s var(--ease),box-shadow .15s var(--ease)}',
+            '.lc-online-btn:hover{background:var(--accent-soft);color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}',
             '.lc-online-btn:active{transform:scale(.94)}',
-            '.lc-online-btn .lc-online-count{font-size:12px;font-weight:700;color:inherit;line-height:1}',
+            '.lc-online-btn .lc-ico{color:inherit}',
+            '.lc-online-btn .lc-online-count{min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--btn-label);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}',
 
             /* === 置顶按钮（lc-pin-active）=== */
             '.lc-pin-active{background:var(--accent-soft)!important;color:var(--accent)!important}',
 
-            /* === 添加发送者列表项切换动效（淡入 + 上滑）=== */
-            '.lc-add-sender .add-sender-content-container>div{animation:lcListItemIn .22s var(--ease) both}',
-            '@keyframes lcListItemIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}'
+            /* === tab 滑块（滑动指示器）：实心强调色滑块在选中项间滑动 === */
+            '.lc-add-sender .search-container>div:nth-of-type(1){position:relative!important;overflow:hidden!important}',
+            '.lc-tab-slider{position:absolute;top:2px;bottom:2px;left:2px;width:46px;border-radius:8px;background:var(--accent);z-index:0;pointer-events:none;transition:left .25s var(--ease-spring),width .25s var(--ease-spring)}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button{position:relative;z-index:1;transition:background .2s var(--ease),color .2s var(--ease)!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button.lc-tab-active{color:var(--btn-label)!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button[style*="rgb(230, 244, 255)"]{background:transparent!important;color:var(--btn-label)!important}',
+
+            /* === 好友在线/离线视觉区分：在线=暖色边框+指示点，离线=灰显+暗点 === */
+            '.lc-add-sender .add-sender-content-container>div[id^="character-info-panel-"]{position:relative}',
+            '.lc-online-item{border-color:var(--accent)!important;opacity:1!important;box-shadow:0 0 0 1px var(--accent-soft),0 2px 8px rgba(0,0,0,.08)!important}',
+            '.lc-online-item::after{content:"";position:absolute;right:8px;top:8px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--card)}',
+            '.lc-offline-item{opacity:.5!important;filter:grayscale(.35)!important}',
+            '.lc-offline-item::after{content:"";position:absolute;right:8px;top:8px;width:9px;height:9px;border-radius:50%;background:var(--ink-3);box-shadow:0 0 0 2px var(--card)}'
         ].join('\n');
 
         function injectStep7Style() {
@@ -1247,8 +1258,11 @@
         function patchOnlineButton() {
             const searchInput = document.getElementById('LC-Message-SenderSearchInput');
             if (!searchInput) return;
-            const btn = searchInput.nextElementSibling;
-            if (!btn || btn.tagName !== 'BUTTON' || btn.dataset.lcPatched === 'online') return;
+            // friendButton 在搜索框所在容器（.lc-search-wrap 的父）里的 button
+            const wrap = searchInput.closest('.lc-search-wrap') || searchInput.parentElement;
+            const container = wrap ? wrap.parentElement : null;
+            const btn = container ? Array.from(container.children).find(function (c) { return c.tagName === 'BUTTON'; }) : null;
+            if (!btn || btn.dataset.lcPatched === 'online') return;
             btn.dataset.lcPatched = 'online';
             btn.classList.add('lc-online-btn');
             ['width', 'height', 'border', 'borderRadius', 'backgroundColor', 'fontSize', 'color'].forEach(function (p) { try { btn.style[p] = ''; } catch (e) {} });
@@ -1262,6 +1276,77 @@
             if (spans[1]) { spans[1].className = 'lc-online-count'; spans[1].style.cssText = ''; }
         }
         patchOnlineButton();
+
+        // ── 3.6) tab 切换组滑动指示器（热注入：原始函数不生效时创建滑块）
+        function patchTabGroup() {
+            const group = document.querySelector('.lc-add-sender .search-container > div:nth-of-type(1)');
+            if (!group || group.dataset.lcSlider) return;
+            group.dataset.lcSlider = '1';
+            group.style.position = 'relative';
+            let slider = group.querySelector('.lc-tab-slider');
+            if (!slider) {
+                slider = document.createElement('span');
+                slider.className = 'lc-tab-slider';
+                group.appendChild(slider);
+            }
+            function moveSlider() {
+                const active = group.querySelector('button.lc-tab-active') || group.querySelector('button[style*="rgb(230, 244, 255)"]');
+                const btn = active || group.querySelector('button');
+                if (btn && btn.offsetWidth > 0) {
+                    slider.style.width = btn.offsetWidth + 'px';
+                    slider.style.left = btn.offsetLeft + 'px';
+                }
+            }
+            // 等布局完成后定位滑块（面板刚打开时按钮 offsetWidth 可能为 0）
+            requestAnimationFrame(moveSlider);
+            setTimeout(moveSlider, 150);
+            // 添加发送者界面显示/隐藏时重新定位滑块（默认尺寸 0，用户打开时才可见）
+            const addSender = document.getElementById('LC-Message-AddSenderContainer');
+            if (addSender) {
+                const mo2 = new MutationObserver(moveSlider);
+                mo2.observe(addSender, { attributes: true, attributeFilter: ['style'] });
+                window.__lcStep7Cleanups = window.__lcStep7Cleanups || [];
+                window.__lcStep7Cleanups.push(function () { mo2.disconnect(); });
+            }
+            group.addEventListener('click', function (e) {
+                const btn = e.target.closest('button');
+                if (btn) requestAnimationFrame(moveSlider);
+            });
+            const mo = new MutationObserver(moveSlider);
+            mo.observe(group, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+            window.__lcStep7Cleanups = window.__lcStep7Cleanups || [];
+            window.__lcStep7Cleanups.push(function () { mo.disconnect(); });
+        }
+        patchTabGroup();
+
+        // ── 3.7) 好友在线/离线视觉标记（热注入：用 ChatRoomCharacter 尽力判断同房间在线）
+        function patchMemberList() {
+            const list = document.querySelector('.lc-add-sender .add-sender-content-container');
+            if (!list || list.dataset.lcMember) return;
+            list.dataset.lcMember = '1';
+            function isOnline(mn) {
+                try {
+                    if (window.ChatRoomCharacter && Array.isArray(window.ChatRoomCharacter)) {
+                        return window.ChatRoomCharacter.some(function (c) { return c && c.MemberNumber === mn; });
+                    }
+                } catch (e) {}
+                return false;
+            }
+            function mark() {
+                list.querySelectorAll('div[id^="character-info-panel-"]').forEach(function (el) {
+                    const mn = parseInt(el.id.replace('character-info-panel-', ''));
+                    if (isNaN(mn)) return;
+                    el.classList.toggle('lc-online-item', isOnline(mn));
+                    el.classList.toggle('lc-offline-item', !isOnline(mn));
+                });
+            }
+            mark();
+            const mo = new MutationObserver(mark);
+            mo.observe(list, { childList: true, subtree: true });
+            window.__lcStep7Cleanups = window.__lcStep7Cleanups || [];
+            window.__lcStep7Cleanups.push(function () { mo.disconnect(); });
+        }
+        patchMemberList();
 
         // ── 4) 悬浮按钮四边吸附拖拽
         // 说明：四边吸附已由 STEP2 的 wireFabSnap() 统一处理（拖拽释放吸附 + 加载时从
@@ -1291,6 +1376,8 @@
                 markAddSender();
                 patchPencilButton();
                 patchOnlineButton();
+                patchTabGroup();
+                patchMemberList();
             });
             _step7Obs.observe(document.body, { childList: true, subtree: true });
         }
@@ -1301,6 +1388,12 @@
             window.__LC_UI_CLEANUP__ = window.__LC_UI_CLEANUP__ || [];
             window.__LC_UI_CLEANUP__.push(function () {
                 try { if (_step7Obs) _step7Obs.disconnect(); } catch (e) {}
+                try {
+                    if (window.__lcStep7Cleanups) {
+                        window.__lcStep7Cleanups.forEach(function (fn) { try { fn(); } catch (e) {} });
+                        window.__lcStep7Cleanups = [];
+                    }
+                } catch (e) {}
             });
         } catch (e) {}
     })();
@@ -4560,6 +4653,11 @@ class RoomItemPool {
                 switchGroup.style.borderRadius = '4px';
                 switchGroup.style.overflow = 'hidden';
                 switchGroup.style.minWidth = '160px';
+                switchGroup.style.position = 'relative';
+                // 滑动指示器（选中项滑块）
+                const tabSlider = document.createElement('span');
+                tabSlider.className = 'lc-tab-slider';
+                switchGroup.appendChild(tabSlider);
 
                 // 当前模式变量
                 let currentMode = addSenderContainer.getAttribute('data-mode') || 'friend';
@@ -4612,6 +4710,12 @@ class RoomItemPool {
                         btn.style.background = '';
                         btn.style.color = '';
                     });
+                    // 滑块滑动到选中项
+                    const activeBtn = buttonElements[currentMode];
+                    if (activeBtn && tabSlider) {
+                        tabSlider.style.width = activeBtn.offsetWidth + 'px';
+                        tabSlider.style.left = activeBtn.offsetLeft + 'px';
+                    }
                 }
 
                 updateSwitchStyle();
@@ -4805,7 +4909,10 @@ class RoomItemPool {
 
                     const allFriendNumbers = [...onlineFriendNumbers, ...offlineFriendNumbers];
 
-                    createMemberList(allFriendNumbers, container);
+                    createMemberList(allFriendNumbers, container, {
+                        isFriend: true,
+                        onlineSet: new Set(onlineFriendNumbers)
+                    });
                 } 
                 else if (mode === 'lobby') 
                 {
@@ -5031,10 +5138,16 @@ class RoomItemPool {
             }
 
             // 修改成员列表创建函数，添加滚动条支持
-            function createMemberList(memberNumbers, container) {
+            function createMemberList(memberNumbers, container, options) {
                 memberNumbers.forEach(memberNumber => {
                     // 使用createCharacterSmallInfoPanel创建成员项
                     const memberItem = createCharacterSmallInfoPanel(memberNumber);
+
+                    // 在线/离线视觉标记（仅好友模式传入 options）
+                    if (options && options.isFriend) {
+                        const isOnline = options.onlineSet && options.onlineSet.has(parseInt(memberNumber));
+                        memberItem.classList.add(isOnline ? 'lc-online-item' : 'lc-offline-item');
+                    }
                     
                     // 添加按钮样式
                     memberItem.style.cursor = 'pointer';
