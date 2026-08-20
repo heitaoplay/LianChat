@@ -398,7 +398,7 @@
     let _fabWaitObs = null;
     function applyFabReskin() {
         const fab = document.getElementById('floatingMessageButton');
-        if (fab) { reskinFab(fab); observeFab(fab); return; }
+        if (fab) { reskinFab(fab); observeFab(fab); restoreFabSnap(fab); return; }
         // 尚未创建（提交源码加载顺序）：等其出现后一次性应用
         if (_fabWaitObs) return;
         _fabWaitObs = new MutationObserver(function (muts) {
@@ -410,7 +410,7 @@
                         if (_fabWaitObs) _fabWaitObs.disconnect();
                         _fabWaitObs = null;
                         const f = document.getElementById('floatingMessageButton');
-                        if (f) { reskinFab(f); observeFab(f); }
+                        if (f) { reskinFab(f); observeFab(f); restoreFabSnap(f); }
                         return;
                     }
                 }
@@ -419,7 +419,31 @@
         _fabWaitObs.observe(document.body, { childList: true, subtree: true });
     }
 
-    // 拖拽吸附：释放时弹到最近边 12px（弹簧 380ms）。setTimeout 让插件 stopButtonDrag 先存位再动画。
+    // 加载时从 localStorage 恢复上次吸附位置（仅 left/top 绝对定位，清除 right/bottom 漂移）
+    function restoreFabSnap(fab) {
+        try {
+            const raw = localStorage.getItem('floatingMessageButtonPositionSnap');
+            if (!raw) return;
+            const pos = JSON.parse(raw);
+            if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
+            const m = 12;
+            const left = Math.max(m, Math.min(pos.left, window.innerWidth - fab.offsetWidth - m));
+            const top = Math.max(m, Math.min(pos.top, window.innerHeight - fab.offsetHeight - m));
+            fab.style.transition = 'none';
+            fab.style.left = left + 'px';
+            fab.style.top = top + 'px';
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+            // 让 transition 恢复（避免后续拖拽动画失效）
+            requestAnimationFrame(function () {
+                fab.style.transition = 'transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease)';
+            });
+        } catch (e) {}
+    }
+
+    // 拖拽吸附：释放时弹到最近的一条屏幕边 12px，支持上下左右四边任意位置。
+    // 使用 left/top 定位，避免 right/bottom 在窗口缩放时漂移。
+    let _fabSnapHandlers = null;
     function wireFabSnap() {
         if (window.__LC_FAB_SNAP__) return;
         window.__LC_FAB_SNAP__ = true;
@@ -430,27 +454,42 @@
             fab = f; dragging = true; moved = false;
             const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY;
         }
+        function snapToEdge() {
+            if (!fab) return;
+            const rect = fab.getBoundingClientRect();
+            const m = 12, w = rect.width, h = rect.height;
+            const dLeft = rect.left;
+            const dRight = window.innerWidth - rect.right;
+            const dTop = rect.top;
+            const dBottom = window.innerHeight - rect.bottom;
+            const min = Math.min(dLeft, dRight, dTop, dBottom);
+            let left, top;
+            if (min === dLeft) { left = m; top = Math.max(m, Math.min(rect.top, window.innerHeight - h - m)); }
+            else if (min === dRight) { left = window.innerWidth - w - m; top = Math.max(m, Math.min(rect.top, window.innerHeight - h - m)); }
+            else if (min === dTop) { top = m; left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); }
+            else { top = window.innerHeight - h - m; left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); }
+            fab.style.transition = 'left .28s var(--ease),top .28s var(--ease),right .28s var(--ease),bottom .28s var(--ease)';
+            fab.style.left = left + 'px';
+            fab.style.top = top + 'px';
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+            try {
+                localStorage.setItem('floatingMessageButtonPositionSnap', JSON.stringify({ left: left, top: top }));
+            } catch (e) {}
+            setTimeout(function () {
+                if (fab) fab.style.transition = 'transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease)';
+            }, 320);
+        }
         function up(e) {
             if (!dragging) return;
             dragging = false;
             const t = e.changedTouches ? e.changedTouches[0] : e;
             if (Math.abs((t.clientX || sx) - sx) > 3 || Math.abs((t.clientY || sy) - sy) > 3) moved = true;
             if (!moved || !fab) return;
-            setTimeout(function () {
-                const rect = fab.getBoundingClientRect();
-                const m = 12;
-                const nearRight = (window.innerWidth - (rect.left + rect.width)) <= rect.left;
-                const nearBottom = (window.innerHeight - (rect.top + rect.height)) <= rect.top;
-                const right = nearRight ? m : (window.innerWidth - rect.width - m);
-                const bottom = nearBottom ? m : (window.innerHeight - rect.height - m);
-                fab.style.transition = 'right .38s cubic-bezier(.3,1.3,.4,1),bottom .38s cubic-bezier(.3,1.3,.4,1)';
-                fab.style.right = right + 'px';
-                fab.style.bottom = bottom + 'px';
-                setTimeout(function () {
-                    fab.style.transition = 'transform .2s cubic-bezier(.16,1,.3,1),box-shadow .2s cubic-bezier(.16,1,.3,1),background .2s cubic-bezier(.16,1,.3,1)';
-                }, 400);
-            }, 0);
+            // 等插件 stopButtonDrag 存完位再动画
+            setTimeout(snapToEdge, 0);
         }
+        _fabSnapHandlers = { down: down, up: up };
         document.addEventListener('mousedown', down, true);
         document.addEventListener('touchstart', down, true);
         document.addEventListener('mouseup', up, true);
@@ -933,6 +972,222 @@
     injectNativeBarStyle();
 
     // [UI-CUSTOM] STEP6-END
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP7-BEGIN —— 暗色模式补完 + 头部重排 + 右侧标签折叠 + 悬浮按钮四边吸附
+    // 自包含块：依赖 STEP1 令牌层；对当前已渲染的 LianChat 面板做运行时修正与增强。
+    // =======================================================================================
+    (function () {
+        const LC_STEP7_CSS = [
+            /* === 头部重排与缩小 === */
+            /* 主题拨杆并入右侧按钮组后，保证内部 flex 不换行、右对齐 */
+            '.lc-panel-head{min-height:36px!important;padding:4px 8px!important}',
+            '.lc-panel-head > div{display:flex;align-items:center;gap:6px}',
+            '.lc-panel-head > div:last-child{justify-content:flex-end}',
+            /* 按钮尺寸缩小 */
+            '.lc-head-btn{width:28px!important;height:28px!important;border-radius:8px!important}',
+            '.lc-head-btn .lc-ico{width:15px!important;height:15px!important}',
+            '.lc-head-btn--active{background:var(--accent-soft)!important;color:var(--accent)!important;border-color:color-mix(in srgb,var(--accent) 35%,transparent)!important}',
+            /* 主题拨杆缩小 */
+            '.lc-theme-dial{width:56px!important;height:38px!important;border-radius:10px!important}',
+            '.lc-td-mark svg{width:9px!important;height:9px!important}',
+            '.lc-td-mark.light{left:9px!important;top:10px!important}',
+            '.lc-td-mark.auto{left:24px!important;top:2px!important}',
+            '.lc-td-mark.dark{left:39px!important;top:10px!important}',
+            '.lc-td-seat{left:19px!important;top:15px!important;width:20px!important;height:20px!important}',
+            '.lc-td-stem{left:29px!important;top:25px!important;width:7px!important;height:14px!important;margin:-12px 0 0 -3.5px!important;transform-origin:3.5px 12px!important}',
+            '.lc-td-slot{width:6px!important;height:2px!important;margin-left:-3px!important}',
+            'html[data-lc-theme-pref="light"] .lc-td-stem{transform:rotate(-55deg)}',
+            'html[data-lc-theme-pref="auto"] .lc-td-stem{transform:rotate(0deg)}',
+            'html[data-lc-theme-pref="dark"] .lc-td-stem{transform:rotate(55deg)}',
+            /* 隐藏模式文字 chip */
+            '.lc-theme-chip{display:none!important}',
+            /* 标题文字缩小 */
+            '.lc-panel-head > div:first-child > div{font-size:14px!important;font-weight:700!important;color:var(--ink)!important}',
+
+            /* === 添加发送者界面（右侧标签）暗色化 === */
+            '.lc-add-sender{background:var(--panel)!important}',
+            '.lc-add-sender .search-container{background:var(--panel)!important}',
+            /* 模式切换组 / 房间空间切换组 */
+            '.lc-add-sender .search-container > div:nth-of-type(1),',
+            '.lc-add-sender .search-container > div:nth-of-type(2){background:var(--card)!important;border-color:var(--seam)!important}',
+            '.lc-add-sender .search-container > div:nth-of-type(1) button,',
+            '.lc-add-sender .search-container > div:nth-of-type(2) button{background:transparent!important;color:var(--ink)!important}',
+            /* 搜索输入 */
+            '.lc-add-sender .search-container > input{background:var(--bg-sink)!important;color:var(--ink)!important;border-color:var(--seam)!important}',
+            '.lc-add-sender .search-container > input::placeholder{color:var(--ink-3)!important}',
+            /* 列表容器 */
+            '.lc-add-sender .add-sender-content-container{background:var(--panel)!important}',
+            /* 成员/房间卡片（直接子元素） */
+            '.lc-add-sender .add-sender-content-container > div{background:var(--card)!important;border-color:var(--seam)!important;box-shadow:none!important;color:var(--ink)!important}',
+            '.lc-add-sender .add-sender-content-container > div:hover{background:var(--bg-sink)!important}',
+            /* 成员卡片内文字（强制覆盖 #666/#888/#b0b0b0 内联色） */
+            '.lc-add-sender [id^="character-info-panel-"] span{color:var(--ink)!important}',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: rgb(136, 136, 136)"],',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: #888"],',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: rgb(176, 176, 176)"],',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: #b0b0b0"],',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: rgb(102, 102, 102)"],',
+            '.lc-add-sender [id^="character-info-panel-"] span[style*="color: #666"]{color:var(--ink-2)!important}',
+            /* 房间卡片内文字 */
+            '.lc-add-sender .add-sender-content-container > div > div{color:var(--ink)!important}',
+            '.lc-add-sender .add-sender-content-container > div span[style*="color: rgb(136, 136, 136)"],',
+            '.lc-add-sender .add-sender-content-container > div span[style*="color: #888"],',
+            '.lc-add-sender .add-sender-content-container > div span[style*="color: rgb(102, 102, 102)"],',
+            '.lc-add-sender .add-sender-content-container > div span[style*="color: #666"]{color:var(--ink-2)!important}',
+            '.lc-add-sender .add-sender-content-container > div button{background:var(--bg-sink)!important;color:var(--ink-2)!important}',
+            /* 当前房间/禁用的房间项 */
+            '.lc-add-sender .add-sender-content-container > div[style*="opacity: 0.6"]{opacity:.55!important}',
+
+            /* === 左栏个人资料暗色文字补完 === */
+            '.lc-conv-list [id^="character-info-panel-"]{background:transparent!important;border-color:var(--seam)!important}',
+            '.lc-conv-list [id^="character-info-panel-"] span{color:var(--ink)!important}',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: rgb(136, 136, 136)"],',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: #888"],',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: rgb(176, 176, 176)"],',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: #b0b0b0"],',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: rgb(102, 102, 102)"],',
+            '.lc-conv-list [id^="character-info-panel-"] span[style*="color: #666"]{color:var(--ink-2)!important}',
+
+            /* === 右侧标签折叠时的平滑宽度 === */
+            '#LC-Message-SenderList{transition:width .22s var(--ease),min-width .22s var(--ease)}',
+            '#LC-Message-RightContainer{transition:width .22s var(--ease),flex .22s var(--ease)}'
+        ].join('\n');
+
+        function injectStep7Style() {
+            const s = document.getElementById('lc-ui-style');
+            if (!s) return;
+            if (s.textContent.indexOf('lc-step7-marker') >= 0) return;
+            s.textContent += '\n/* lc-step7-marker */\n' + LC_STEP7_CSS;
+        }
+        injectStep7Style();
+
+        // ── 1) 头部重排：把主题拨杆挪进右侧按钮组最左侧，并隐藏模式文字
+        function reorderHeader() {
+            const dlg = document.querySelector('.lc-panel');
+            if (!dlg) return;
+            const head = dlg.querySelector('.lc-panel-head');
+            if (!head || head.dataset.lcReordered) return;
+            const host = document.getElementById('lc-theme-host');
+            const rightButtons = head.children[1];
+            if (!host || !rightButtons) return;
+            // 把拨杆塞进右侧按钮容器最前面
+            if (host.parentElement !== rightButtons) {
+                rightButtons.insertBefore(host, rightButtons.firstChild);
+                host.style.position = 'static';
+                host.style.bottom = 'auto';
+                host.style.right = 'auto';
+                host.style.zIndex = '';
+            }
+            // 隐藏文字 chip
+            const chip = document.getElementById('lcThemeChip');
+            if (chip) chip.style.display = 'none';
+            head.dataset.lcReordered = '1';
+        }
+        reorderHeader();
+
+        // ── 2) 给右侧标签容器打暗色类
+        function markAddSender() {
+            const asc = document.getElementById('LC-Message-AddSenderContainer');
+            if (asc && !asc.classList.contains('lc-add-sender')) {
+                asc.classList.add('lc-add-sender');
+            }
+        }
+        markAddSender();
+
+        // ── 3) 铅笔按钮改为“收起/展开右侧标签”
+        function patchPencilButton() {
+            const dlg = document.querySelector('.lc-panel');
+            if (!dlg) return;
+            const pencil = [...dlg.querySelectorAll('button.lc-head-btn')].find(function (b) {
+                return b.title === '切换单双页模式';
+            });
+            if (!pencil || pencil.dataset.lcPatched === 'pencil') return;
+            pencil.dataset.lcPatched = 'pencil';
+            pencil.title = '收起/展开右侧标签';
+            pencil.setAttribute('aria-label', '收起/展开右侧标签');
+            // clone 掉原 click 监听
+            const clone = pencil.cloneNode(true);
+            pencil.parentElement.replaceChild(clone, pencil);
+            clone.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const rightContainer = document.getElementById('LC-Message-RightContainer');
+                const senderList = document.getElementById('LC-Message-SenderList');
+                const content = document.getElementById('LC-Message-RightMessageContainer');
+                if (!rightContainer || !senderList) return;
+                const collapsed = rightContainer.dataset.lcCollapsed === '1';
+                if (collapsed) {
+                    // 展开：恢复双栏
+                    rightContainer.style.display = 'flex';
+                    rightContainer.style.width = '';
+                    rightContainer.style.flex = '1 1 0%';
+                    senderList.style.width = '220px';
+                    senderList.style.minWidth = '220px';
+                    rightContainer.dataset.lcCollapsed = '0';
+                    clone.classList.remove('lc-head-btn--active');
+                    // 如果有当前会话，显示聊天；否则显示添加发送者
+                    if (content && selectedSenderNum) {
+                        hideAddSenderInterface();
+                    } else {
+                        showAddSenderInterface();
+                    }
+                } else {
+                    // 收起：只留左侧发送者列表
+                    rightContainer.style.display = 'none';
+                    rightContainer.style.width = '0';
+                    rightContainer.style.flex = '0 0 0';
+                    senderList.style.width = '100%';
+                    senderList.style.minWidth = '100%';
+                    rightContainer.dataset.lcCollapsed = '1';
+                    clone.classList.add('lc-head-btn--active');
+                }
+                // 面板尺寸约束
+                if (typeof constrainDialogToWindow === 'function' && dlg) constrainDialogToWindow(dlg);
+            });
+        }
+        patchPencilButton();
+
+        // ── 4) 悬浮按钮四边吸附拖拽
+        // 说明：四边吸附已由 STEP2 的 wireFabSnap() 统一处理（拖拽释放吸附 + 加载时从
+        // localStorage 恢复位置），此处不再克隆/替换 FAB，避免与 STEP2 的 reskin/observe 体系冲突。
+
+        // ── 5) 面板整体尺寸缩小（仅设置一次，保留用户 resize 能力）
+        function resizePanel() {
+            const dlg = document.querySelector('.lc-panel');
+            if (!dlg || dlg.dataset.lcResized) return;
+            const isMobile = (typeof CommonIsMobile !== 'undefined' && CommonIsMobile) || window.innerWidth < 640;
+            if (!isMobile) {
+                dlg.style.width = '900px';
+                dlg.style.height = '580px';
+                dlg.style.maxWidth = 'calc(100vw - 40px)';
+                dlg.style.maxHeight = 'calc(100vh - 40px)';
+            }
+            dlg.dataset.lcResized = '1';
+        }
+        resizePanel();
+
+        // 观察器：对话框重建/右侧标签重新渲染后自动再打补丁
+        let _step7Obs = null;
+        function observeAndReapply() {
+            if (_step7Obs) return;
+            _step7Obs = new MutationObserver(function () {
+                reorderHeader();
+                markAddSender();
+                patchPencilButton();
+            });
+            _step7Obs.observe(document.body, { childList: true, subtree: true });
+        }
+        observeAndReapply();
+
+        // 清理注册
+        try {
+            window.__LC_UI_CLEANUP__ = window.__LC_UI_CLEANUP__ || [];
+            window.__LC_UI_CLEANUP__.push(function () {
+                try { if (_step7Obs) _step7Obs.disconnect(); } catch (e) {}
+            });
+        } catch (e) {}
+    })();
+    // [UI-CUSTOM] STEP7-END
 
     // 初始化全局图片缓存
     if (!window.ImageCache) {
