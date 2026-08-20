@@ -81,7 +81,8 @@
         moon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 14.6A8.6 8.6 0 0 1 9.4 3.7a8.6 8.6 0 1 0 10.9 10.9z"/></svg>',
         emptyChat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.8-.9L3 20l1.2-5.4a8.2 8.2 0 0 1-.9-3.7A8.4 8.4 0 0 1 11.8 2.5 8.4 8.4 0 0 1 21 11.5Z"/><circle cx="9" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="11.5" r="1.1" fill="currentColor" stroke="none"/></svg>',
         person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
-        door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5l7-3 7 3v16"/><path d="M9 21v-6h6v6"/><path d="M12 11.8v.6"/></svg>'
+        door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5l7-3 7 3v16"/><path d="M9 21v-6h6v6"/><path d="M12 11.8v.6"/></svg>',
+        panelToggle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M14 4v16"/><path d="M9 10l3 2-3 2"/></svg>'
     };
 
     // 渲染辅助：<span class="lc-ico [cls]"><svg…/></span>；尺寸由 CSS class 控制
@@ -120,8 +121,8 @@
             /* 暗色主题令牌 */
             'html[data-lc-theme="dark"]{',
             '  --bg:#211c19; --bg-sink:#2a2420; --panel:#322a25; --panel-dn:#1a1614;',
-            '  --card:#2a2420; --seam:rgba(255,255,255,.06);',
-            '  --ink:#f1e9dd; --ink-2:#a99e8f; --ink-3:#7c7264;',
+            '  --card:#2a2420; --seam:rgba(255,255,255,.11);',
+            '  --ink:#f5ede1; --ink-2:#cdc4b6; --ink-3:#9a8f80;',
             '  --accent:#f0805a; --accent-soft:rgba(240,128,90,.16);',
             '  --line:rgba(255,255,255,.07); --hairline:rgba(255,255,255,.05);',
             '  --shadow:rgba(0,0,0,.2) 0 1px 2px, rgba(0,0,0,.15) 0 6px 20px -6px;',
@@ -310,6 +311,9 @@
         '  color:var(--ink);font-size:24px;user-select:none;-webkit-tap-highlight-color:transparent;',
         '  transition:transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease);}',
         '.lc-fab:hover{transform:translateY(-2px);box-shadow:var(--shadow-inset),0 4px 10px var(--line),var(--shadow-float)}',
+        /* 聚焦：去除浏览器默认蓝色 outline，改用强调色环（可访问性保留 :focus-visible） */
+        '.lc-fab:focus{outline:none}',
+        '.lc-fab:focus-visible{outline:none;box-shadow:var(--shadow-inset),var(--shadow-float),0 0 0 3px var(--accent-soft)}',
         '.lc-fab:active{transform:scale(.92)}',
         /* 对话框打开态：糖果强调色 */
         '.lc-fab--open{background:var(--accent);color:var(--btn-label);border-color:transparent}',
@@ -566,12 +570,38 @@
 
     const LC_DIALOG_CSS = [
         /* 面板外壳 */
-        '.lc-panel{background:var(--panel);border:1px solid var(--seam);border-radius:var(--r-card);box-shadow:var(--shadow);color:var(--ink);font-family:var(--lc-font)}',
+        '.lc-panel{background:var(--panel);border:1px solid var(--seam);border-radius:var(--r-card);box-shadow:var(--shadow);color:var(--ink);font-family:var(--lc-font);animation:lcPanelIn .3s var(--ease-spring) both}',
+        '@keyframes lcPanelIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}',
+        /* 面板关闭动画（通过 .lc-panel--closing 类触发）*/
+        '.lc-panel--closing{animation:lcPanelOut .2s var(--ease) both}',
+        '@keyframes lcPanelOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.97)}}',
+        /* 滚动条：webkit 自定义（火柴粗细、hover 加深），同时 firefox thin */
+        '.lc-panel *::-webkit-scrollbar{width:8px;height:8px}',
+        '.lc-panel *::-webkit-scrollbar-track{background:transparent}',
+        '.lc-panel *::-webkit-scrollbar-thumb{background:var(--seam);border-radius:4px;border:2px solid transparent;background-clip:padding-box;transition:background .15s var(--ease)}',
+        '.lc-panel *::-webkit-scrollbar-thumb:hover{background:var(--ink-2)}',
+        '.lc-panel *{scrollbar-width:thin;scrollbar-color:var(--seam) transparent}',
+        /* 头像：圆 40、白边 2、微阴影，hover 微放大 */
+        '.lc-av{width:40px;height:40px;border-radius:50%;border:2px solid var(--card);box-shadow:0 1px 3px var(--line);object-fit:cover;flex-shrink:0;background:var(--bg-sink);transition:transform .15s var(--ease)}',
+        '.lc-conv-item:hover .lc-av{transform:scale(1.06)}',
+        /* 消息气泡出现动画 */
+        '@keyframes lcMsgIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}',
+        '.lc-msg-self,.lc-msg-other,.lc-bubble{animation:lcMsgIn .28s var(--ease-spring) both}',
+        /* 自己消息从右侧滑入，他人从左侧滑入 */
+        '.lc-msg-self .lc-bubble{animation:lcMsgInR .28s var(--ease-spring) both}',
+        '.lc-msg-other .lc-bubble{animation:lcMsgInL .28s var(--ease-spring) both}',
+        '@keyframes lcMsgInR{from{opacity:0;transform:translateX(12px) scale(.98)}to{opacity:1;transform:translateX(0) scale(1)}}',
+        '@keyframes lcMsgInL{from{opacity:0;transform:translateX(-12px) scale(.98)}to{opacity:1;transform:translateX(0) scale(1)}}',
         '.lc-panel-head{background:var(--panel-dn);border-bottom:1px solid var(--seam);padding:6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}',
         /* 头部按钮（16px SVG） */
         '.lc-head-btn{width:32px;height:32px;border:1px solid var(--seam);border-radius:10px;background:var(--card);color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s var(--ease),color .15s var(--ease),transform .15s var(--ease)}',
         '.lc-head-btn:hover{background:var(--accent-soft);color:var(--accent)}',
+        '.lc-head-btn:focus{outline:none}',
+        '.lc-head-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-soft)}',
         '.lc-head-btn:active{transform:scale(.94)}',
+        /* 迷你按钮同样处理焦点 */
+        '.lc-mini-btn:focus{outline:none}',
+        '.lc-mini-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent-soft)}',
         '.lc-head-btn .lc-ico{width:16px;height:16px}',
         /* 右工具条（14px 迷你按钮） */
         '.lc-right-head{background:var(--panel-dn);border-top:1px solid var(--seam);border-bottom:1px solid var(--seam);padding:5px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-shrink:0}',
@@ -1139,6 +1169,8 @@
             pencil.dataset.lcPatched = 'pencil';
             pencil.title = '收起/展开右侧标签';
             pencil.setAttribute('aria-label', '收起/展开右侧标签');
+            // 替换图标为「侧边栏切换」：外框 + 竖线 + 折叠箭头（告别"书写"铅笔）
+            pencil.innerHTML = lcIcon('panelToggle', 'lc-ico--md');
             // clone 掉原 click 监听
             const clone = pencil.cloneNode(true);
             pencil.parentElement.replaceChild(clone, pencil);
@@ -1159,8 +1191,14 @@
                     rightContainer.dataset.lcCollapsed = '0';
                     clone.classList.remove('lc-head-btn--active');
                     // 如果有当前会话，显示聊天；否则显示添加发送者
-                    if (content && selectedSenderNum) {
-                        hideAddSenderInterface();
+                    if (content) {
+                        // 用 DOM 判断当前是否有会话（添加发送者容器是否被隐藏）
+                        var asc = document.getElementById('LC-Message-AddSenderContainer');
+                        if (asc && asc.style.display === 'none') {
+                            hideAddSenderInterface();
+                        } else {
+                            showAddSenderInterface();
+                        }
                     } else {
                         showAddSenderInterface();
                     }
