@@ -57,6 +57,883 @@
 
     const FloatZindex = 100001;
 
+    // =======================================================================================
+    // [UI-CUSTOM] STEP1-BEGIN —— 设计令牌层 + ThemeModule + 3D 拨杆 + SVG 图标集
+    // 自包含块：不依赖本插件任何内部变量，可整体提取作为独立热注入补丁（lc-hot-inject.js）。
+    // 覆盖范围：injectDesignTokens() / ThemeModule（data-lc-theme-pref + data-lc-theme）/
+    //           LC_ICONS 14 枚 / lcIcon() 渲染辅助。
+    // =======================================================================================
+
+    // ── SVG 图标集（design-strategist 提供，stroke:currentColor，零色值；颜色由父级 .lc-* 控制）
+    const LC_ICONS = {
+        chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.8-.9L3 20l1.2-5.4a8.2 8.2 0 0 1-.9-3.7A8.4 8.4 0 0 1 11.8 2.5 8.4 8.4 0 0 1 21 11.5Z"/></svg>',
+        pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+        gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.3 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.3 2.6h4l.3-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2Z"/></svg>',
+        close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+        disk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
+        chevL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+        chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+        search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-11 11"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>',
+        sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4.4" fill="currentColor" stroke="none"/><path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>',
+        half: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 3.4a8.6 8.6 0 0 0 0 17.2z" fill="currentColor" stroke="none"/></svg>',
+        moon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 14.6A8.6 8.6 0 0 1 9.4 3.7a8.6 8.6 0 1 0 10.9 10.9z"/></svg>',
+        emptyChat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.8-.9L3 20l1.2-5.4a8.2 8.2 0 0 1-.9-3.7A8.4 8.4 0 0 1 11.8 2.5 8.4 8.4 0 0 1 21 11.5Z"/><circle cx="9" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="11.5" r="1.1" fill="currentColor" stroke="none"/></svg>',
+        person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+        door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5l7-3 7 3v16"/><path d="M9 21v-6h6v6"/><path d="M12 11.8v.6"/></svg>'
+    };
+
+    // 渲染辅助：<span class="lc-ico [cls]"><svg…/></span>；尺寸由 CSS class 控制
+    function lcIcon(name, cls) {
+        const svg = LC_ICONS[name] || '';
+        return '<span class="lc-ico' + (cls ? ' ' + cls : '') + '">' + svg + '</span>';
+    }
+
+    // ── 设计令牌 CSS 层（注入 head，id=lc-ui-style；幂等：先删旧再建）
+    function injectDesignTokens() {
+        const old = document.getElementById('lc-ui-style');
+        if (old) old.remove();
+        const style = document.createElement('style');
+        style.id = 'lc-ui-style';
+        style.textContent = [
+            /* 基础令牌（双主题共享） */
+            'html[data-lc-theme]{',
+            '  --ease:cubic-bezier(.3,1.3,.4,1);',
+            '  --ease-out:cubic-bezier(.16,1,.3,1);',
+            '  --ease-spring:cubic-bezier(.34,1.56,.64,1);',
+            '  --r-pill:999px; --r-tab:9px; --r-card:14px; --r-row:10px;',
+            '  --lc-font:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;',
+            '}',
+            /* 亮色主题令牌 */
+            'html[data-lc-theme="light"]{',
+            '  --bg:#F6F1E7; --bg-sink:#F1EBDE; --panel:#EBE6DA; --panel-dn:#E1DBCC;',
+            '  --card:#FBF8F1; --seam:#E4DED0;',
+            '  --ink:#2B2925; --ink-2:#6A645D; --ink-3:#8F8A82;',
+            '  --accent:#E8483F; --accent-soft:rgba(232,72,63,.12);',
+            '  --line:rgba(43,41,37,.10); --hairline:rgba(43,41,37,.08);',
+            '  --shadow:rgba(43,41,37,.08) 0 1px 2px, rgba(43,41,37,.06) 0 6px 20px -6px;',
+            '  --shadow-float:rgba(43,41,37,.12) 0 2px 4px, rgba(43,41,37,.10) 0 12px 32px -8px;',
+            '  --shadow-inset:inset rgba(255,255,255,.55) 0 1px 0;',
+            '  --btn-ink:#1A1917; --btn-ink-h:#2D2B28; --btn-sink:#050505; --btn-label:#F6F3EC;',
+            '}',
+            /* 暗色主题令牌 */
+            'html[data-lc-theme="dark"]{',
+            '  --bg:#211c19; --bg-sink:#2a2420; --panel:#322a25; --panel-dn:#1a1614;',
+            '  --card:#2a2420; --seam:rgba(255,255,255,.06);',
+            '  --ink:#f1e9dd; --ink-2:#a99e8f; --ink-3:#7c7264;',
+            '  --accent:#f0805a; --accent-soft:rgba(240,128,90,.16);',
+            '  --line:rgba(255,255,255,.07); --hairline:rgba(255,255,255,.05);',
+            '  --shadow:rgba(0,0,0,.2) 0 1px 2px, rgba(0,0,0,.15) 0 6px 20px -6px;',
+            '  --shadow-float:rgba(0,0,0,.25) 0 2px 4px, rgba(0,0,0,.20) 0 12px 32px -8px;',
+            '  --shadow-inset:inset rgba(255,255,255,.04) 0 1px 0;',
+            '  --btn-ink:#F2EEE6; --btn-ink-h:#FFFFFF; --btn-sink:#000000; --btn-label:#1A1917;',
+            '}',
+            /* 图标尺寸 */
+            '.lc-ico{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;line-height:0}',
+            '.lc-ico svg{display:block;width:100%;height:100%}',
+            '.lc-ico--sm{width:14px;height:14px}',
+            '.lc-ico--md{width:16px;height:16px}',
+            '.lc-ico--lg{width:24px;height:24px}',
+            /* 主题拨杆浮层宿主（Step3 头部重排后并入对话框 head，届时删此宿主）
+               z=100001 与 fab 同级：保证 Step1 期间浮层恒在面板之上可点；并入面板后不适用 */
+            '#lc-theme-host{position:fixed;right:10px;bottom:162px;z-index:100001;display:flex;align-items:center;gap:8px;font-family:var(--lc-font);-webkit-tap-highlight-color:transparent}',
+            '.lc-theme-chip{font-size:11px;color:var(--ink-2);letter-spacing:.06em;white-space:nowrap;transition:color .2s var(--ease)}',
+            /* 3D 拨杆（72×48，home.css 旋钮文化 + v3.5 预览规格） */
+            '.lc-theme-dial{position:relative;width:72px;height:48px;flex:none;border:0;padding:0;background:none;cursor:pointer;border-radius:14px}',
+            '.lc-theme-dial:focus-visible{outline:2px solid var(--accent);outline-offset:2px}',
+            '.lc-td-mark{position:absolute;width:10px;height:10px;color:color-mix(in srgb,var(--ink-2) 78%,var(--bg));transition:color .2s var(--ease)}',
+            '.lc-td-mark svg{width:10px;height:10px;display:block}',
+            '.lc-td-mark.light{left:11.3px;top:12.2px}',
+            '.lc-td-mark.auto{left:31px;top:2px}',
+            '.lc-td-mark.dark{left:50.7px;top:12.2px}',
+            '.lc-td-seat{position:absolute;left:23px;top:18px;width:26px;height:26px;border-radius:50%;background:var(--panel);border:1px solid var(--seam);box-shadow:inset 0 1px 2px rgba(43,41,37,.10)}',
+            '.lc-td-stem{position:absolute;left:36px;top:31px;width:9px;height:18px;margin:-16px 0 0 -4.5px;transform-origin:4.5px 16px;border-radius:50%;background:var(--card);border:1px solid var(--seam);box-shadow:0 1px 3px rgba(43,41,37,.26);transition:transform .32s var(--ease-spring)}',
+            '.lc-td-slot{position:absolute;left:50%;top:3px;width:8px;height:2.5px;margin-left:-4px;border-radius:2px;background:var(--accent)}',
+            'html[data-lc-theme-pref="light"] .lc-td-stem{transform:rotate(-55deg)}',
+            'html[data-lc-theme-pref="auto"] .lc-td-stem{transform:rotate(0deg)}',
+            'html[data-lc-theme-pref="dark"] .lc-td-stem{transform:rotate(55deg)}',
+            'html[data-lc-theme-pref="light"] .lc-td-mark.light,',
+            'html[data-lc-theme-pref="auto"] .lc-td-mark.auto,',
+            'html[data-lc-theme-pref="dark"] .lc-td-mark.dark{color:var(--ink)}',
+            /* reduced-motion 守卫 */
+            '@media (prefers-reduced-motion:reduce){',
+            '  .lc-td-stem{transition:none!important}',
+            '  .lc-theme-chip{transition:none}',
+            '}'
+        ].join('\n');
+        document.head.appendChild(style);
+    }
+
+    // ── ThemeModule：双属性 data-lc-theme-pref（用户偏好）/ data-lc-theme（实际生效）
+    const ThemeModule = (function () {
+        const STORAGE_KEY = 'LC_THEME_PREF';
+        const PREF_VALUES = ['light', 'auto', 'dark'];
+        let pref = 'auto';
+        let _mo = null, _mql = null, _onChange = null; // 累积注入清理用
+
+        function readPref() {
+            try {
+                const v = localStorage.getItem(STORAGE_KEY);
+                if (PREF_VALUES.indexOf(v) >= 0) return v;
+            } catch (e) { console.warn('[LianChat-UI] localStorage 不可用，主题偏好仅本次生效', e); }
+            return 'auto';
+        }
+        function writePref(v) {
+            try { localStorage.setItem(STORAGE_KEY, v); }
+            catch (e) { console.warn('[LianChat-UI] 主题偏好保存失败', e); }
+        }
+        function systemDark() {
+            try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+            catch (e) { return false; }
+        }
+        function bcDark() {
+            // 优先采 BC 房间明暗（bc-script-dev §9.4 ColorAPI），失败回退系统偏好
+            try {
+                const api = window.Liko && window.Liko.__Sys_ColorAPI__;
+                if (api && typeof api.getThemeColor === 'function') {
+                    const c = api.getThemeColor();
+                    if (c && typeof api.isDark === 'function') return !!api.isDark(c);
+                }
+            } catch (e) { /* ColorAPI 异常走回退 */ }
+            return systemDark();
+        }
+        function effective() { return pref === 'auto' ? (bcDark() ? 'dark' : 'light') : pref; }
+
+        function apply() {
+            const eff = effective();
+            const root = document.documentElement;
+            root.setAttribute('data-lc-theme-pref', pref);
+            root.setAttribute('data-lc-theme', eff);
+            const dial = document.getElementById('lcThemeDial');
+            if (dial) dial.setAttribute('aria-label', '主题模式：' + ({ light: '白天', auto: '跟随房间', dark: '夜间' }[pref]));
+            const chip = document.getElementById('lcThemeChip');
+            if (chip) chip.textContent = eff === 'dark' ? '夜间' : '白天';
+        }
+
+        function renderDial() {
+            const old = document.getElementById('lc-theme-host');
+            if (old) old.remove();
+            const host = document.createElement('div');
+            host.id = 'lc-theme-host';
+            host.innerHTML =
+                '<button class="lc-theme-dial" id="lcThemeDial" type="button" aria-label="主题模式">' +
+                '<span class="lc-td-mark light" aria-hidden="true">' + LC_ICONS.sun + '</span>' +
+                '<span class="lc-td-mark auto" aria-hidden="true">' + LC_ICONS.half + '</span>' +
+                '<span class="lc-td-mark dark" aria-hidden="true">' + LC_ICONS.moon + '</span>' +
+                '<span class="lc-td-seat"></span>' +
+                '<span class="lc-td-stem"><span class="lc-td-slot"></span></span>' +
+                '</button>' +
+                '<span class="lc-theme-chip" id="lcThemeChip"></span>';
+            document.body.appendChild(host);
+            host.querySelector('.lc-theme-dial').addEventListener('click', function () {
+                const i = PREF_VALUES.indexOf(pref);
+                pref = PREF_VALUES[(i + 1) % PREF_VALUES.length];
+                writePref(pref);
+                apply();
+            });
+        }
+
+        function init() {
+            pref = readPref();
+            renderDial();
+            apply();
+            try {
+                _mql = window.matchMedia('(prefers-color-scheme: dark)');
+                _onChange = function () { if (pref === 'auto') apply(); };
+                if (_mql.addEventListener) _mql.addEventListener('change', _onChange);
+                else if (_mql.addListener) _mql.addListener(_onChange);
+            } catch (e) { console.warn('[LianChat-UI] matchMedia 监听失败', e); }
+            // 对话框打开时重采一次 BC 房间主题（auto 模式跟随房间明暗）
+            try {
+                _mo = new MutationObserver(function (muts) {
+                    for (let i = 0; i < muts.length; i++) {
+                        const m = muts[i];
+                        for (let j = 0; j < m.addedNodes.length; j++) {
+                            const n = m.addedNodes[j];
+                            if (n.nodeType === 1 && (n.id === 'LC-Message-SenderList' || (n.querySelector && n.querySelector('#LC-Message-SenderList')))) {
+                                if (pref === 'auto') apply();
+                                return;
+                            }
+                        }
+                    }
+                });
+                _mo.observe(document.body, { childList: true, subtree: true });
+            } catch (e) { console.warn('[LianChat-UI] 房间主题监听失败', e); }
+        }
+
+        function dispose() {
+            try { if (_mo) _mo.disconnect(); } catch (e) {}
+            try {
+                if (_mql && _onChange) {
+                    if (_mql.removeEventListener) _mql.removeEventListener('change', _onChange);
+                    else if (_mql.removeListener) _mql.removeListener(_onChange);
+                }
+            } catch (e) {}
+        }
+
+        return { init: init, apply: apply, dispose: dispose, getPref: function () { return pref; } };
+    })();
+
+    // Step1 自启动
+    injectDesignTokens();
+    ThemeModule.init();
+
+    // 累积注入幂等：注册清理（断开监听器 + 删顶层元素），供 lc-hot-inject 重注入前调用
+    try {
+        window.__LC_UI_CLEANUP__ = window.__LC_UI_CLEANUP__ || [];
+        window.__LC_UI_CLEANUP__.push(function () {
+            try { ThemeModule.dispose(); } catch (e) {}
+            var s = document.getElementById('lc-ui-style'); if (s) s.remove();
+            var h = document.getElementById('lc-theme-host'); if (h) h.remove();
+        });
+    } catch (e) {}
+
+    // [UI-CUSTOM] STEP1-END
+    // =======================================================================================
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP2-BEGIN —— 悬浮消息按钮（.lc-fab）外观换肤 + 持久重应用 + 拖拽吸附
+    // 自包含块：依赖 STEP1 的 LC_ICONS / 令牌层；不依赖插件内部变量（热注入模式下插件函数在闭包内不可达）。
+    // 热注入模式：对线上（v0.1.1）已渲染的 #floatingMessageButton 做 DOM 手术 + MutationObserver 持久化，
+    //   因为 updateFloatingButtonState() 每次清空 innerHTML 重建 PNG 图标与内联徽标，必须重应用。
+    // 提交源码模式：createFloatingMessageButton / updateFloatingButtonState 改为调用本块的 reskinFab()。
+    // =======================================================================================
+
+    // ── 悬浮按钮 CSS（附加进 #lc-ui-style；幂等：检测 lc-fab 指纹避免重复追加）
+    const LC_FAB_CSS = [
+        /* 本体：58px 圆、卡片底、发丝边、内高光、浮层阴影 */
+        '.lc-fab{position:fixed;z-index:100001;width:58px;height:58px;border-radius:50%;',
+        '  display:flex;align-items:center;justify-content:center;cursor:pointer;',
+        '  background:var(--card);border:1px solid var(--hairline);',
+        '  box-shadow:var(--shadow-inset),var(--shadow-float);',
+        '  color:var(--ink);font-size:24px;user-select:none;-webkit-tap-highlight-color:transparent;',
+        '  transition:transform .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease);}',
+        '.lc-fab:hover{transform:translateY(-2px);box-shadow:var(--shadow-inset),0 4px 10px var(--line),var(--shadow-float)}',
+        '.lc-fab:active{transform:scale(.92)}',
+        /* 对话框打开态：糖果强调色 */
+        '.lc-fab--open{background:var(--accent);color:var(--btn-label);border-color:transparent}',
+        '.lc-fab--open .lc-fab-ico{color:var(--btn-label)}',
+        /* 图标（currentColor，零色值） */
+        '.lc-fab .lc-ico{width:24px;height:24px;color:var(--ink)}',
+        /* 未读徽标 */
+        '.lc-fab-badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;',
+        '  display:flex;align-items:center;justify-content:center;box-sizing:border-box;',
+        '  border-radius:999px;background:var(--accent);color:var(--btn-label);',
+        '  font:700 11px/1 var(--lc-font);box-shadow:0 2px 6px rgba(0,0,0,.25);border:1px solid var(--card);}',
+        /* 呼吸光环（1.8s 提示在线/未读） */
+        '.lc-fab-ring{position:absolute;inset:0;border-radius:50%;pointer-events:none;',
+        '  box-shadow:0 0 0 0 var(--accent-soft);animation:lcFabRing 1.8s var(--ease) infinite;}',
+        '@keyframes lcFabRing{0%{box-shadow:0 0 0 0 var(--accent-soft)}70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}',
+        /* 入场 */
+        '.lc-fab--rise{animation:lcFabRise .42s var(--ease-spring) both}',
+        '@keyframes lcFabRise{from{opacity:0;transform:translateY(14px) scale(.8)}to{opacity:1;transform:translateY(0) scale(1)}}',
+        /* reduced-motion 守卫 */
+        '@media (prefers-reduced-motion:reduce){',
+        '  .lc-fab,.lc-fab:hover,.lc-fab:active{transition:none!important;transform:none!important}',
+        '  .lc-fab-ring{animation:none!important}',
+        '  .lc-fab--rise{animation:none!important}',
+        '}'
+    ].join('\n');
+
+    function injectFabStyle() {
+        const s = document.getElementById('lc-ui-style');
+        if (!s) return;
+        if (s.textContent.indexOf('lc-fab') >= 0) return; // 幂等
+        s.textContent += '\n' + LC_FAB_CSS;
+    }
+
+    // 重应用：对单个 FAB 做外观换肤（幂等，断开观察器避免自触发循环）
+    let _fabObs = null;
+    function reskinFab(fab) {
+        if (!fab) return;
+        if (_fabObs) _fabObs.disconnect();
+        // 删除外观冲突内联（保留 position/right/bottom/zIndex 位置相关）
+        ['width', 'height', 'backgroundColor', 'borderRadius', 'boxShadow', 'fontSize',
+            'userSelect', 'display', 'alignItems', 'justifyContent', 'transition', 'border', 'color'
+        ].forEach(function (p) { try { fab.style[p] = ''; } catch (e) {} });
+        fab.classList.add('lc-fab');
+        // 入场动画仅首次（重渲染用 html.lc-no-anim 跳过）
+        if (!fab.dataset.lcFabDone && !document.documentElement.classList.contains('lc-no-anim')) {
+            fab.classList.add('lc-fab--rise');
+            fab.dataset.lcFabDone = '1';
+        }
+        // 清理原 PNG 图标 div
+        const png = fab.querySelector('div[style*="background-image"]');
+        if (png) png.remove();
+        // 图标 span（currentColor SVG）
+        let icon = fab.querySelector('.lc-fab-ico');
+        if (!icon) {
+            icon = document.createElement('span');
+            icon.className = 'lc-fab-ico lc-ico lc-ico--lg';
+            fab.insertBefore(icon, fab.firstChild);
+        }
+        icon.innerHTML = LC_ICONS.chat;
+        // 呼吸环（始终存在）
+        if (!fab.querySelector('.lc-fab-ring')) {
+            const ring = document.createElement('span');
+            ring.className = 'lc-fab-ring';
+            fab.appendChild(ring);
+        }
+        // 徽标换肤（插件生成，保留未读数；仅加 class + 清内联）
+        const nodes = fab.children;
+        for (let i = 0; i < nodes.length; i++) {
+            const el = nodes[i];
+            if (el.classList.contains('lc-fab-ico') || el.classList.contains('lc-fab-ring')) continue;
+            if (el.tagName === 'DIV' && (el.style.backgroundImage || el.style.backgroundColor || el.style.cssText)) {
+                el.className = 'lc-fab-badge';
+                el.style.cssText = '';
+            }
+        }
+        // 重新挂观察器（仅 childList + class，避免拖拽 right/bottom 触发）
+        if (_fabObs) _fabObs.observe(fab, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    function observeFab(fab) {
+        if (_fabObs) _fabObs.disconnect();
+        _fabObs = new MutationObserver(function () { reskinFab(fab); });
+        _fabObs.observe(fab, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+
+    let _fabWaitObs = null;
+    function applyFabReskin() {
+        const fab = document.getElementById('floatingMessageButton');
+        if (fab) { reskinFab(fab); observeFab(fab); return; }
+        // 尚未创建（提交源码加载顺序）：等其出现后一次性应用
+        if (_fabWaitObs) return;
+        _fabWaitObs = new MutationObserver(function (muts) {
+            for (let i = 0; i < muts.length; i++) {
+                const m = muts[i];
+                for (let j = 0; j < m.addedNodes.length; j++) {
+                    const n = m.addedNodes[j];
+                    if (n.nodeType === 1 && (n.id === 'floatingMessageButton' || (n.querySelector && n.querySelector('#floatingMessageButton')))) {
+                        if (_fabWaitObs) _fabWaitObs.disconnect();
+                        _fabWaitObs = null;
+                        const f = document.getElementById('floatingMessageButton');
+                        if (f) { reskinFab(f); observeFab(f); }
+                        return;
+                    }
+                }
+            }
+        });
+        _fabWaitObs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // 拖拽吸附：释放时弹到最近边 12px（弹簧 380ms）。setTimeout 让插件 stopButtonDrag 先存位再动画。
+    function wireFabSnap() {
+        if (window.__LC_FAB_SNAP__) return;
+        window.__LC_FAB_SNAP__ = true;
+        let fab = null, dragging = false, sx = 0, sy = 0, moved = false;
+        function down(e) {
+            const f = document.getElementById('floatingMessageButton');
+            if (!f || !f.contains(e.target)) return;
+            fab = f; dragging = true; moved = false;
+            const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY;
+        }
+        function up(e) {
+            if (!dragging) return;
+            dragging = false;
+            const t = e.changedTouches ? e.changedTouches[0] : e;
+            if (Math.abs((t.clientX || sx) - sx) > 3 || Math.abs((t.clientY || sy) - sy) > 3) moved = true;
+            if (!moved || !fab) return;
+            setTimeout(function () {
+                const rect = fab.getBoundingClientRect();
+                const m = 12;
+                const nearRight = (window.innerWidth - (rect.left + rect.width)) <= rect.left;
+                const nearBottom = (window.innerHeight - (rect.top + rect.height)) <= rect.top;
+                const right = nearRight ? m : (window.innerWidth - rect.width - m);
+                const bottom = nearBottom ? m : (window.innerHeight - rect.height - m);
+                fab.style.transition = 'right .38s cubic-bezier(.3,1.3,.4,1),bottom .38s cubic-bezier(.3,1.3,.4,1)';
+                fab.style.right = right + 'px';
+                fab.style.bottom = bottom + 'px';
+                setTimeout(function () {
+                    fab.style.transition = 'transform .2s cubic-bezier(.16,1,.3,1),box-shadow .2s cubic-bezier(.16,1,.3,1),background .2s cubic-bezier(.16,1,.3,1)';
+                }, 400);
+            }, 0);
+        }
+        document.addEventListener('mousedown', down, true);
+        document.addEventListener('touchstart', down, true);
+        document.addEventListener('mouseup', up, true);
+        document.addEventListener('touchend', up, true);
+    }
+
+    // Step2 自启动（热注入：FAB 通常已存在；提交源码：经 applyFabReskin 等待创建）
+    injectFabStyle();
+    applyFabReskin();
+    wireFabSnap();
+
+    // 累积注入幂等：清理 STEP2 新增元素/观察器/监听器
+    try {
+        window.__LC_UI_CLEANUP__ = window.__LC_UI_CLEANUP__ || [];
+        window.__LC_UI_CLEANUP__.push(function () {
+            if (_fabObs) _fabObs.disconnect();
+            if (_fabWaitObs) _fabWaitObs.disconnect();
+            var fab = document.getElementById('floatingMessageButton');
+            if (fab) {
+                fab.classList.remove('lc-fab', 'lc-fab--rise', 'lc-fab--open');
+                var r = fab.querySelector('.lc-fab-ring'); if (r) r.remove();
+                var i = fab.querySelector('.lc-fab-ico'); if (i) i.remove();
+            }
+            window.__LC_FAB_SNAP__ = false;
+        });
+    } catch (e) {}
+
+    // [UI-CUSTOM] STEP2-END
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP3-BEGIN —— 消息对话框（.lc-panel）外观换肤 + 头部图标化 + 主题拨杆并入头部
+    // 自包含块：依赖 STEP1 的 LC_ICONS / 令牌层；不依赖插件内部变量（热注入模式下插件函数在闭包内不可达）。
+    // 热注入模式：对线上（v0.1.1）已渲染的对话框做 DOM 手术 + MutationObserver 持久化。
+    //   - 面板外壳 .lc-panel；头部 .lc-panel-head + 三枚头部按钮 SVG 化（pencil/gear/close）
+    //   - 右工具条 .lc-right-head + 迷你按钮 SVG 化（plus/disk）；搜索框包 .lc-search-wrap
+    //   - 输入 .lc-input（聚焦珊瑚色下边）；发送 .lc-ico-send；时间分隔复用 .message-time-divider
+    //   - 会话项 .lc-conv-item / 头像 .lc-av；气泡 .lc-msg-self/.lc-msg-other + .lc-bubble
+    //   - 合并 STEP1 浮层拨杆 #lc-theme-host 进头部（移除浮层）
+    // 提交源码模式：createMessageDialog / createMessageItem / createTimeDivider / createToolbar 改为调用本块 helper。
+    // =======================================================================================
+
+    const LC_DIALOG_CSS = [
+        /* 面板外壳 */
+        '.lc-panel{background:var(--panel);border:1px solid var(--seam);border-radius:var(--r-card);box-shadow:var(--shadow);color:var(--ink);font-family:var(--lc-font)}',
+        '.lc-panel-head{background:var(--panel-dn);border-bottom:1px solid var(--seam);padding:6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}',
+        /* 头部按钮（16px SVG） */
+        '.lc-head-btn{width:32px;height:32px;border:1px solid var(--seam);border-radius:10px;background:var(--card);color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:background .15s var(--ease),color .15s var(--ease),transform .15s var(--ease)}',
+        '.lc-head-btn:hover{background:var(--accent-soft);color:var(--accent)}',
+        '.lc-head-btn:active{transform:scale(.94)}',
+        '.lc-head-btn .lc-ico{width:16px;height:16px}',
+        /* 右工具条（14px 迷你按钮） */
+        '.lc-right-head{background:var(--panel-dn);border-top:1px solid var(--seam);border-bottom:1px solid var(--seam);padding:5px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-shrink:0}',
+        '.lc-mini-btn{height:28px;min-width:28px;padding:0 8px;border:1px solid var(--seam);border-radius:8px;background:var(--card);color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;font-size:12px;transition:background .15s var(--ease),color .15s var(--ease)}',
+        '.lc-mini-btn:hover{background:var(--accent-soft);color:var(--accent)}',
+        '.lc-mini-btn .lc-ico{width:14px;height:14px}',
+        /* 搜索框包裹 */
+        '.lc-search-wrap{display:flex;align-items:center;gap:8px;padding:0 0 10px 0;border-bottom:1px solid var(--seam);margin-bottom:10px}',
+        '.lc-search-wrap input{flex:1;width:100%;padding:8px 10px;border:1px solid var(--seam);border-radius:10px;background:var(--bg-sink);color:var(--ink);box-sizing:border-box;font-family:var(--lc-font);font-size:13px;outline:none;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}',
+        '.lc-search-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}',
+        /* 输入区 */
+        '.lc-input{flex:1;padding:10px 12px;border:1px solid var(--seam);border-radius:12px;background:var(--bg-sink);color:var(--ink);font-family:var(--lc-font);font-size:14px;outline:none;resize:none;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}',
+        '.lc-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}',
+        /* 发送按钮（糖果） */
+        '.lc-ico-send{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border:none;border-radius:12px;background:var(--accent);color:var(--btn-label);font-weight:600;font-size:14px;cursor:pointer;font-family:var(--lc-font);transition:filter .15s var(--ease),transform .15s var(--ease)}',
+        '.lc-ico-send:hover{filter:brightness(1.06)}',
+        '.lc-ico-send:active{transform:scale(.96)}',
+        '.lc-ico-send .lc-ico{width:16px;height:16px}',
+        /* 会话列表项 */
+        '.lc-conv-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-row);cursor:pointer;transition:background .15s var(--ease);background:var(--card)!important;color:var(--ink)!important}',
+        '.lc-conv-item:hover{background:var(--bg-sink)!important}',
+        '.lc-conv-item.is-active{background:var(--accent-soft)!important}',
+        '.lc-conv-item > div{background:transparent!important;color:inherit!important}',
+        '.lc-conv-list{background:var(--bg-sink);border-right:1px solid var(--seam)}',
+        '.lc-av{width:36px;height:36px;border-radius:50%;flex:none;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--panel);color:var(--ink-2);font-size:13px;font-weight:600}',
+        '.lc-av.a1{background:linear-gradient(135deg,#ffd3c2,#ff9a76)} .lc-av.a2{background:linear-gradient(135deg,#c2e9ff,#76b6ff)} .lc-av.a3{background:linear-gradient(135deg,#d8ffc2,#9bff76)} .lc-av.a4{background:linear-gradient(135deg,#e7c2ff,#b876ff)} .lc-av.a5{background:linear-gradient(135deg,#ffe9c2,#ffce76)} .lc-av.a6{background:linear-gradient(135deg,#c2fff0,#76ffd9)}',
+        '.lc-conv-main{flex:1;min-width:0}',
+        '.lc-conv-name{font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.lc-conv-time{font-size:11px;color:var(--ink-3)}',
+        '.lc-conv-preview{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.lc-unread{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:var(--btn-label);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}',
+        /* 消息气泡 */
+        '.lc-msg-self,.lc-msg-other{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}',
+        '.lc-msg-self{justify-content:flex-end}',
+        '.lc-bubble{position:relative;max-width:80%;min-width:50px;padding:8px 10px;border-radius:12px;font-size:14px;line-height:1.45;word-break:break-word;color:var(--ink)!important}',
+        /* !important 压制原内联紫色背景（self=#e1f5fe / other=#f9f9f9） */
+        '.lc-msg-other .lc-bubble{background:var(--bg-sink)!important;color:var(--ink)!important;border:1px solid var(--seam)!important;border-top-left-radius:4px!important}',
+        '.lc-msg-self .lc-bubble{background:var(--accent-soft)!important;color:var(--ink)!important;border-top-right-radius:4px!important}',
+        /* 系统/状态行（如“现在在线/离线”“悄悄话来自 …”）无气泡子元素时的兜底归类 */
+        '.lc-msg-system{padding:6px 10px;color:var(--ink-2);font-size:12px;text-align:center;opacity:.85}',
+        '.lc-msg-footer{font-size:11px;color:var(--ink-3);margin-top:2px;opacity:.85}',
+        /* 时间分隔（复用现有 .message-time-divider 类，!important 压制内联） */
+        '.message-time-divider{background:var(--panel-dn)!important;color:var(--ink-2)!important;border:1px solid var(--seam)!important}',
+        /* 设置浮层 */
+        '.lc-settings{background:var(--panel)!important;border:1px solid var(--seam)!important;border-radius:var(--r-card)!important;box-shadow:var(--shadow-float)!important;color:var(--ink)!important;font-family:var(--lc-font)!important}',
+        /* reduced-motion 守卫 */
+        '@media (prefers-reduced-motion:reduce){.lc-head-btn,.lc-mini-btn,.lc-ico-send{transition:none!important}.lc-head-btn:active,.lc-mini-btn:active,.lc-ico-send:active{transform:none!important}}'
+    ].join('\n');
+
+    function injectDialogStyle() {
+        const s = document.getElementById('lc-ui-style');
+        if (!s) return;
+        if (s.textContent.indexOf('lc-panel') >= 0) return; // 幂等
+        s.textContent += '\n' + LC_DIALOG_CSS;
+    }
+
+    function _svgIcon(name, size) {
+        const span = document.createElement('span');
+        span.className = 'lc-ico' + (size ? ' lc-ico--' + size : '');
+        span.innerHTML = (LC_ICONS[name] || '');
+        return span;
+    }
+    function _swapBtnIcon(btn, name, size) {
+        if (!btn) return;
+        btn.textContent = '';
+        btn.appendChild(_svgIcon(name, size));
+    }
+    function _strip(el, props) {
+        if (!el) return;
+        props.forEach(function (p) { try { el.style[p] = ''; } catch (e) {} });
+    }
+
+    // 找到对话框（含 #LC-Message-SenderList 的 fixed 定位祖先）
+    function _findDialog() {
+        const sl = document.getElementById('LC-Message-SenderList');
+        if (!sl) return null;
+        let n = sl;
+        while (n && !(n.style && n.style.position === 'fixed')) n = n.parentElement;
+        return n;
+    }
+    function _findTitleBar(dlg) {
+        const btns = [].slice.call(dlg.querySelectorAll('button'));
+        const anchor = btns.find(function (b) { return b.textContent === '⚙' || b.textContent === '×' || b.textContent === '📄'; });
+        if (!anchor) {
+            // 兜底：标题栏为 dlg 直接子元素中持有多枚按钮的 flex 行（按钮文本尚未填充时也能命中）
+            const kids = [].slice.call(dlg.children);
+            for (let i = 0; i < kids.length; i++) {
+                const k = kids[i];
+                if (k.querySelectorAll && k.querySelectorAll('button').length >= 2) return k;
+            }
+            return null;
+        }
+        let p = anchor.parentElement;
+        while (p && p.parentElement !== dlg) p = p.parentElement;
+        return p;
+    }
+    // 将主题拨杆 #lc-theme-host 并入头部（幂等：若已在头部则跳过；inline position:static 压过 STEP1 的 fixed）
+    function _moveDialIntoHead(dlg) {
+        const host = document.getElementById('lc-theme-host');
+        if (!host) return false;
+        const titleBar = _findTitleBar(dlg);
+        if (!titleBar) return false;
+        if (host.parentElement === titleBar) return true;
+        host.style.position = 'static';
+        host.style.bottom = 'auto';
+        host.style.right = 'auto';
+        titleBar.appendChild(host);
+        return true;
+    }
+
+    let _dlgObs = null, _convObs = null, _bubbleObs = null, _dlgWaitObs = null;
+
+    function reskinConvItem(row) {
+        if (!row || row.classList.contains('lc-conv-item')) return;
+        row.classList.add('lc-conv-item');
+        _strip(row, ['backgroundColor', 'color']);
+        const kids = row.children;
+        for (let i = 0; i < kids.length; i++) {
+            if (kids[i].tagName === 'DIV') _strip(kids[i], ['backgroundColor', 'color']);
+        }
+    }
+    function reskinBubble(item) {
+        if (!item || item.classList.contains('lc-msg-self') || item.classList.contains('lc-msg-other') || item.classList.contains('lc-msg-system')) return;
+        // 输入框容器（含 #LC-Message-InputField）不是消息行，跳过
+        if (item.querySelector && item.querySelector('#LC-Message-InputField')) return;
+        const self = item.style.justifyContent === 'flex-end';
+        item.classList.add(self ? 'lc-msg-self' : 'lc-msg-other');
+        _strip(item, ['justifyContent']);
+        const bubble = [].slice.call(item.children).find(function (c) {
+            return c.style && (c.style.backgroundColor || c.style.maxWidth === '80%' || c.style.borderLeft);
+        });
+        if (bubble) {
+            _strip(bubble, ['backgroundColor', 'borderLeft', 'borderRadius', 'padding', 'color']);
+            bubble.classList.add('lc-bubble');
+        } else {
+            // 无气泡子元素的纯状态/系统行（如“现在在线/离线”），单独归类
+            item.classList.remove('lc-msg-self', 'lc-msg-other');
+            item.classList.add('lc-msg-system');
+        }
+    }
+    // 扫描消息区内的消息行（messageItem 特征：inline display:flex + align-items:flex-start + 方向）
+    function _scanBubbles(rm) {
+        if (!rm) return;
+        [].slice.call(rm.querySelectorAll('div[style*="justify-content"][style*="align-items: flex-start"]')).forEach(reskinBubble);
+    }
+
+    function reskinDialog(dlg) {
+        if (!dlg) return;
+        if (_dlgObs) _dlgObs.disconnect();
+
+        // 面板外壳（删除内联外观，让 .lc-panel 类生效；保留 position/size 等功能性内联）
+        dlg.classList.add('lc-panel');
+        _strip(dlg, ['backgroundColor', 'border', 'borderRadius', 'boxShadow', 'color']);
+
+        // 会话列表左栏（去掉内联 #ddd 分隔，改用令牌 seam）
+        const sl0 = document.getElementById('LC-Message-SenderList');
+        if (sl0) { _strip(sl0, ['borderRight', 'backgroundColor']); sl0.classList.add('lc-conv-list'); }
+
+        // 头部 + 三枚按钮 SVG 化
+        const btns = [].slice.call(dlg.querySelectorAll('button'));
+        const pageBtn = btns.find(function (b) { return b.textContent === '📄'; });
+        const setBtn = btns.find(function (b) { return b.textContent === '⚙'; });
+        const closeBtn = btns.find(function (b) { return b.textContent === '×'; });
+        const titleBar = _findTitleBar(dlg);
+        if (titleBar) {
+            titleBar.classList.add('lc-panel-head');
+            [pageBtn, setBtn, closeBtn].forEach(function (b) {
+                if (!b || b.classList.contains('lc-head-btn')) return;
+                b.classList.add('lc-head-btn');
+                _strip(b, ['background', 'border', 'borderRadius', 'color', 'width', 'height', 'fontSize', 'fontWeight']);
+            });
+            if (pageBtn && pageBtn.textContent === '📄') _swapBtnIcon(pageBtn, 'pencil', 'md');
+            if (setBtn && setBtn.textContent === '⚙') _swapBtnIcon(setBtn, 'gear', 'md');
+            if (closeBtn && closeBtn.textContent === '×') _swapBtnIcon(closeBtn, 'close', 'md');
+            // 合并主题拨杆进头部（含兜底重试：头部按钮可能稍后填充）
+            if (!_moveDialIntoHead(dlg)) {
+                setTimeout(function () { if (dlg && dlg.isConnected) _moveDialIntoHead(dlg); }, 200);
+            }
+        }
+
+        // 搜索框包裹
+        const searchInput = document.getElementById('LC-Message-SenderSearchInput');
+        if (searchInput && !searchInput.parentElement.classList.contains('lc-search-wrap')) {
+            const wrap = document.createElement('div');
+            wrap.className = 'lc-search-wrap';
+            searchInput.parentElement.insertBefore(wrap, searchInput);
+            wrap.appendChild(searchInput);
+            if (searchInput.parentElement && searchInput.parentElement !== wrap) {
+                // 把原容器多余边框交给 wrap，避免双线
+                const sc = wrap.parentElement;
+                if (sc) { sc.style.borderBottom = ''; sc.style.marginBottom = ''; }
+            }
+        }
+
+        // 输入区 + 发送按钮
+        const input = document.getElementById('LC-Message-InputField');
+        if (input && !input.classList.contains('lc-input')) {
+            _strip(input, ['border', 'borderRadius', 'background', 'color', 'padding', 'outline', 'boxShadow', 'boxSizing']);
+            input.classList.add('lc-input');
+        }
+        const send = document.getElementById('messageSendButton');
+        if (send && !send.classList.contains('lc-ico-send')) {
+            _strip(send, ['background', 'color', 'border', 'borderRadius', 'padding']);
+            send.classList.add('lc-ico-send');
+            if (!send.querySelector('.lc-ico')) send.insertBefore(_svgIcon('send', 'md'), send.firstChild);
+        }
+
+        // 右工具条 + 迷你按钮 SVG 化
+        const qb = btns.find(function (b) { return b.textContent && b.textContent.indexOf('➕') >= 0; });
+        const db = btns.find(function (b) { return b.textContent === '💾'; });
+        const toolbar = qb ? qb.parentElement.parentElement : null;
+        if (toolbar) {
+            toolbar.classList.add('lc-right-head');
+            _strip(toolbar, ['borderTop', 'borderBottom', 'padding', 'marginBottom']);
+            if (qb && !qb.classList.contains('lc-mini-btn')) { qb.classList.add('lc-mini-btn'); _strip(qb, ['background', 'border', 'borderRadius', 'color', 'padding']); _swapBtnIcon(qb, 'plus', 'sm'); }
+            if (db && !db.classList.contains('lc-mini-btn')) { db.classList.add('lc-mini-btn'); _strip(db, ['background', 'border', 'borderRadius', 'color', 'padding']); _swapBtnIcon(db, 'disk', 'sm'); }
+        }
+
+        // 设置浮层
+        const settings = document.getElementById('lianChatSettingsDialog');
+        if (settings) settings.classList.add('lc-settings');
+
+        // 持久化：会话项 + 气泡 观察器
+        const sl = document.getElementById('LC-Message-SenderList');
+        if (sl && !_convObs) {
+            _convObs = new MutationObserver(function () {
+                [].slice.call(sl.querySelectorAll(':scope > * *')).forEach(function (el) {
+                    if (el.querySelector && el.querySelector('img,div[style*="border-radius: 50%"]')) reskinConvItem(el);
+                });
+            });
+            _convObs.observe(sl, { childList: true, subtree: true });
+        }
+        const rm = document.getElementById('LC-Message-RightMessageContainer');
+        if (rm) {
+            // 初始扫描：消息行可能已渲染（如打开即带历史）
+            _scanBubbles(rm);
+            if (!_bubbleObs) {
+                _bubbleObs = new MutationObserver(function () { _scanBubbles(rm); });
+                // subtree:true 才能捕获嵌套在 messageContent 内的消息行
+                _bubbleObs.observe(rm, { childList: true, subtree: true });
+            }
+        }
+
+        // 重新挂对话框级观察器（重渲染时重应用）
+        if (_dlgObs) { /* 已 disconnect */ }
+        _dlgObs = new MutationObserver(function () { reskinDialogLight(dlg); });
+        _dlgObs.observe(dlg, { childList: true, subtree: false });
+    }
+
+    // 轻量重应用（重渲染后恢复头部按钮/搜索/输入类，避免重复 wrap）
+    function reskinDialogLight(dlg) {
+        const btns = [].slice.call(dlg.querySelectorAll('button'));
+        const pageBtn = btns.find(function (b) { return b.textContent === '📄'; });
+        const setBtn = btns.find(function (b) { return b.textContent === '⚙'; });
+        const closeBtn = btns.find(function (b) { return b.textContent === '×'; });
+        if (pageBtn && pageBtn.textContent === '📄') _swapBtnIcon(pageBtn, 'pencil', 'md');
+        if (setBtn && setBtn.textContent === '⚙') _swapBtnIcon(setBtn, 'gear', 'md');
+        if (closeBtn && closeBtn.textContent === '×') _swapBtnIcon(closeBtn, 'close', 'md');
+        const input = document.getElementById('LC-Message-InputField');
+        if (input && !input.classList.contains('lc-input')) { _strip(input, ['border', 'borderRadius', 'background', 'color', 'padding', 'outline', 'boxShadow', 'boxSizing']); input.classList.add('lc-input'); }
+        const send = document.getElementById('messageSendButton');
+        if (send && !send.classList.contains('lc-ico-send')) { _strip(send, ['background', 'color', 'border', 'borderRadius', 'padding']); send.classList.add('lc-ico-send'); if (!send.querySelector('.lc-ico')) send.insertBefore(_svgIcon('send', 'md'), send.firstChild); }
+        // 方案 A：轻量重应用也兜底移动拨杆（重渲染/按钮填充后）
+        _moveDialIntoHead(dlg);
+    }
+
+    function applyDialogReskin() {
+        const dlg = _findDialog();
+        if (dlg) { reskinDialog(dlg); return; }
+        if (_dlgWaitObs) return;
+        _dlgWaitObs = new MutationObserver(function (muts) {
+            for (let i = 0; i < muts.length; i++) {
+                const m = muts[i];
+                for (let j = 0; j < m.addedNodes.length; j++) {
+                    const n = m.addedNodes[j];
+                    if (n.nodeType === 1 && (n.querySelector && n.querySelector('#LC-Message-SenderList'))) {
+                        if (_dlgWaitObs) _dlgWaitObs.disconnect();
+                        _dlgWaitObs = null;
+                        const d = _findDialog();
+                        if (d) {
+                            reskinDialog(d);
+                            // 方案 B：延迟一次再整轮重应用，等头部按钮填充完成后确保拨杆入头
+                            setTimeout(function () { if (d && d.isConnected) reskinDialog(d); }, 200);
+                        }
+                        return;
+                    }
+                }
+            }
+        });
+        _dlgWaitObs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // Step3 自启动
+    injectDialogStyle();
+    applyDialogReskin();
+
+    // 累积注入幂等：清理 STEP3 新增元素/观察器
+    try {
+        window.__LC_UI_CLEANUP__ = window.__LC_UI_CLEANUP__ || [];
+        window.__LC_UI_CLEANUP__.push(function () {
+            if (_dlgObs) _dlgObs.disconnect();
+            if (_convObs) _convObs.disconnect();
+            if (_bubbleObs) _bubbleObs.disconnect();
+            if (_dlgWaitObs) _dlgWaitObs.disconnect();
+        });
+    } catch (e) {}
+
+    // [UI-CUSTOM] STEP3-END
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP4-BEGIN —— 设置浮层（#lianChatSettingsDialog）PommeToys 化：iOS 开关(带 I/O) + 自定义单选行 + 糖果确定
+    // 自包含块：依赖 STEP1 令牌层；纯 CSS 注入 #lc-ui-style（设置浮层按需创建，id 选择器自出现即生效，无需观察器）。
+    // 不依赖插件内部变量。提交源码模式：showLianChatSettingsDialog() 可删内联外观直接继承本皮肤。
+    // =======================================================================================
+    const LC_SETTINGS_CSS = [
+        /* 浮层外壳（覆盖原内联 white / 绿按钮） */
+        '#lianChatSettingsDialog{',
+        '  background:var(--panel)!important;color:var(--ink)!important;',
+        '  border:1px solid var(--seam)!important;border-radius:18px!important;',
+        '  box-shadow:var(--shadow-float),0 0 0 1px rgba(0,0,0,.02)!important;',
+        '  padding:26px 28px 20px!important;font-family:var(--lc-font)!important;',
+        '  animation:lcSetIn .28s var(--ease-spring) both;}',
+        '@keyframes lcSetIn{from{opacity:0;transform:translate(-50%,-46%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}',
+        /* 标题 */
+        '#lianChatSettingsDialog > div:first-child{color:var(--ink)!important;font-size:1.25em!important;margin-bottom:16px!important}',
+        /* 区块说明文字（hideLabel 等 div） */
+        '#lianChatSettingsDialog > div:not(:first-child){color:var(--ink-2)!important}',
+        /* 后台通知行（直接子 label，开关置右） */
+        '#lianChatSettingsDialog > label{display:flex!important;flex-direction:row-reverse!important;align-items:center!important;justify-content:space-between!important;',
+        '  gap:14px!important;margin-bottom:18px!important;color:var(--ink)!important;cursor:pointer!important;font-size:14px!important}',
+        /* 隐藏方式三选项（group 内 label → 可选行卡片） */
+        '#lianChatSettingsDialog div label{display:flex!important;align-items:center!important;gap:10px!important;',
+        '  margin-bottom:8px!important;padding:10px 12px!important;border-radius:var(--r-row)!important;',
+        '  background:var(--bg-sink)!important;border:1px solid var(--line)!important;color:var(--ink-2)!important;',
+        '  cursor:pointer!important;font-size:14px!important;',
+        '  transition:background .2s var(--ease),color .2s var(--ease),border-color .2s var(--ease)}',
+        '#lianChatSettingsDialog div label:has(input:checked){color:var(--ink)!important;background:var(--accent-soft)!important;',
+        '  border-color:color-mix(in srgb,var(--accent) 45%,transparent)!important;font-weight:600!important}',
+        /* 原生 radio → 自定义圆点 */
+        '#lianChatSettingsDialog input[type=radio]{appearance:none!important;-webkit-appearance:none!important;',
+        '  width:20px!important;height:20px!important;flex:none!important;margin:0 2px 0 0!important;',
+        '  border-radius:50%!important;border:2px solid var(--seam)!important;background:var(--card)!important;',
+        '  cursor:pointer!important;position:relative!important;transition:border-color .2s var(--ease),box-shadow .2s var(--ease)!important}',
+        '#lianChatSettingsDialog input[type=radio]:checked{border-color:var(--accent)!important;box-shadow:inset 0 0 0 4px var(--accent)!important}',
+        /* 原生 checkbox → iOS 开关（带 I/O 标记，accent 轨） */
+        '#lianChatSettingsDialog input[type=checkbox]{appearance:none!important;-webkit-appearance:none!important;',
+        '  position:relative!important;width:46px!important;height:28px!important;flex:none!important;margin:0!important;',
+        '  border-radius:999px!important;border:1px solid var(--seam)!important;background:var(--panel-dn)!important;',
+        '  cursor:pointer!important;transition:background .25s var(--ease),border-color .25s var(--ease)!important}',
+        '#lianChatSettingsDialog input[type=checkbox]:checked{background:var(--accent)!important;border-color:transparent!important}',
+        '#lianChatSettingsDialog input[type=checkbox]::after{content:""!important;position:absolute!important;top:2px!important;left:2px!important;',
+        '  width:22px!important;height:22px!important;border-radius:50%!important;background:var(--card)!important;',
+        '  box-shadow:0 1px 3px rgba(0,0,0,.3)!important;transition:transform .25s var(--ease-spring)!important}',
+        '#lianChatSettingsDialog input[type=checkbox]:checked::after{transform:translateX(18px)!important}',
+        '#lianChatSettingsDialog input[type=checkbox]::before{content:"O"!important;position:absolute!important;right:7px!important;top:50%!important;',
+        '  transform:translateY(-50%)!important;font:700 11px/1 var(--lc-font)!important;color:var(--ink-3)!important}',
+        '#lianChatSettingsDialog input[type=checkbox]:checked::before{content:"I"!important;right:auto!important;left:7px!important;color:var(--btn-label)!important}',
+        /* 确定按钮：糖果 */
+        '#lianChatSettingsDialog button{margin-top:10px!important;align-self:center!important;padding:11px 32px!important;border:none!important;cursor:pointer!important;',
+        '  background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 82%,#000))!important;',
+        '  color:var(--btn-label)!important;border-radius:var(--r-pill)!important;font:600 15px/1 var(--lc-font)!important;',
+        '  box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.25)!important;',
+        '  transition:transform .12s var(--ease),filter .2s var(--ease)!important}',
+        '#lianChatSettingsDialog button:hover{filter:brightness(1.05)!important}',
+        '#lianChatSettingsDialog button:active{transform:scale(.95)!important}',
+        /* reduced-motion 守卫 */
+        '@media (prefers-reduced-motion:reduce){',
+        '  #lianChatSettingsDialog{animation:none!important}',
+        '  #lianChatSettingsDialog input[type=radio],#lianChatSettingsDialog input[type=checkbox],#lianChatSettingsDialog input[type=checkbox]::after{transition:none!important}',
+        '  #lianChatSettingsDialog button{transition:none!important}',
+        '  #lianChatSettingsDialog button:active{transform:none!important}',
+        '}'
+    ].join('\n');
+
+    function injectSettingsStyle() {
+        const s = document.getElementById('lc-ui-style');
+        if (!s) return;
+        if (s.textContent.indexOf('lianChatSettingsDialog') >= 0) return; // 幂等
+        s.textContent += '\n' + LC_SETTINGS_CSS;
+    }
+    injectSettingsStyle();
+
+    // [UI-CUSTOM] STEP4-END
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP5-BEGIN —— 抛光：气泡入场动画 + 会话项按压微交互 + reduced-motion 守卫补全
+    // 自包含块：依赖令牌层；纯 CSS 注入 #lc-ui-style。
+    // =======================================================================================
+    const LC_POLISH_CSS = [
+        /* 消息气泡入场（仅首次加类时播放；reskin 已对加过类的跳过） */
+        '@keyframes lcBubbleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}',
+        '.lc-bubble{animation:lcBubbleIn .26s var(--ease-out) both}',
+        /* 会话项按压微交互（补 transform 过渡，避免生硬） */
+        '.lc-conv-item{transition:background .15s var(--ease),transform .12s var(--ease)}',
+        '.lc-conv-item:active{transform:scale(.98)}',
+        /* reduced-motion 守卫 */
+        '@media (prefers-reduced-motion:reduce){',
+        '  .lc-bubble{animation:none!important}',
+        '  .lc-conv-item:active{transform:none!important}',
+        '}'
+    ].join('\n');
+    function injectPolishStyle() {
+        const s = document.getElementById('lc-ui-style');
+        if (!s) return;
+        if (s.textContent.indexOf('lcBubbleIn') >= 0) return; // 幂等
+        s.textContent += '\n' + LC_POLISH_CSS;
+    }
+    injectPolishStyle();
+
+    // [UI-CUSTOM] STEP5-END
+
+    // =======================================================================================
+    // [UI-CUSTOM] STEP6-BEGIN —— 原生聊天日志通知条（#TextAreaChatLog .ChatMessage.bce-notification）暖色化
+    // 自包含块：依赖 STEP1 令牌层；纯 CSS 注入 #lc-ui-style。仅改配色（跟随 LianChat 主题），不动布局/结构，避免破坏 BC 原生排版。
+    // 实测原生：bg rgb(214,150,255) 浅紫 / 黑字 / 无边框 / 方角 / 子元素 .chat-room-metadata 灰字。
+    // 用 inset box-shadow 画左侧强调轨，零回流、不撑宽；主题自动档下浅紫→奶油珊瑚/暖橙 tint。
+    // =======================================================================================
+    const LC_NATIVEBAR_CSS = [
+        '#TextAreaChatLog .ChatMessage.bce-notification{',
+        '  background:var(--accent-soft)!important;',
+        '  color:var(--ink-2)!important;',
+        '  box-shadow:inset 3px 0 0 0 var(--accent)!important;}',
+        '#TextAreaChatLog .ChatMessage.bce-notification .chat-room-metadata{color:var(--ink-3)!important}'
+    ].join('\n');
+    function injectNativeBarStyle() {
+        const s = document.getElementById('lc-ui-style');
+        if (!s) return;
+        if (s.textContent.indexOf('bce-notification') >= 0) return; // 幂等
+        s.textContent += '\n' + LC_NATIVEBAR_CSS;
+    }
+    injectNativeBarStyle();
+
+    // [UI-CUSTOM] STEP6-END
+
     // 初始化全局图片缓存
     if (!window.ImageCache) {
         window.ImageCache = {
@@ -4436,6 +5313,8 @@ class RoomItemPool {
                         
             // 添加到文档
             document.body.appendChild(messageDialog);
+            // Step3：创建即套用 .lc-panel 外观（头部 SVG / 搜索 / 输入 / 发送 / 列表），观察者负责后续持久化
+            try { if (typeof reskinDialog === 'function') reskinDialog(messageDialog); } catch (e) {}
 
             // 添加窗口大小变化监听器，确保对话框在窗口范围内
             const resizeHandler = function() {
@@ -6244,19 +7123,10 @@ function createFloatingMessageButton() {
     // 创建按钮容器
     const buttonContainer = document.createElement('div');
     buttonContainer.id = 'floatingMessageButton';
+    // 外观改由 .lc-fab 类（STEP2 注入）提供；仅保留功能性定位相关
+    buttonContainer.className = 'lc-fab';
     buttonContainer.style.position = 'fixed';
     buttonContainer.style.zIndex = FloatZindex;
-    buttonContainer.style.width = '50px';
-    buttonContainer.style.height = '50px';
-    buttonContainer.style.borderRadius = '50%';
-    buttonContainer.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
-    buttonContainer.style.cursor = 'pointer';
-    buttonContainer.style.display = 'flex';
-    buttonContainer.style.alignItems = 'center';
-    buttonContainer.style.justifyContent = 'center';
-    buttonContainer.style.fontSize = '24px';
-    buttonContainer.style.userSelect = 'none';
-    buttonContainer.style.transition = 'transform 0.2s';
     
     // 设置初始位置（右下角）
     const initialPosition = getStoredButtonPosition();
@@ -6441,6 +7311,8 @@ function createFloatingMessageButton() {
     
     // 添加到文档
     document.body.appendChild(buttonContainer);
+    // Step2：首次创建即套用 .lc-fab 外观（SVG 图标 + 呼吸环 + 入场），观察者负责后续持久化
+    try { if (typeof reskinFab === 'function') reskinFab(buttonContainer); } catch (e) {}
     
     // 添加窗口大小变化监听器，保持相对位置不变
     window.addEventListener('resize', updateButtonPosition);
@@ -6454,65 +7326,30 @@ function createFloatingMessageButton() {
     });
 }
 
-// 更新按钮状态（颜色、图标、未读数）
+// 更新按钮状态（颜色、图标、未读数）—— Step2：改用 .lc-* 类，零内联色值
 function updateFloatingButtonState() {
     const button = document.getElementById('floatingMessageButton');
     if (!button) return;
-    
-    // 获取未读消息数
+
     const unreadCount = MessageModule.getTotalUnreadCount();
-    
-    // 设置基本样式
-    if (MessageModule.isMessageDialogVisible()) {
-        // 对话框打开状态
-        button.style.backgroundColor = '#4fc3f7';
-        button.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.3)';
-    } else {
-        // 对话框关闭状态
-        button.style.backgroundColor = '#ebebeb';
-        button.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
-    }
-    
-    // 清空按钮内容
+    // 打开态切换为糖果强调色（由 .lc-fab--open 类提供，零内联）
+    button.classList.toggle('lc-fab--open', !!MessageModule.isMessageDialogVisible());
+
+    // 清空并重建为 SVG 图标 + 呼吸环 + 未读徽标（.lc-* 类，零内联色值）
     button.innerHTML = '';
-    
-    // 创建图标元素
-    const iconElement = document.createElement('div');
-    iconElement.style.width = '100%';
-    iconElement.style.height = '100%';
-    iconElement.style.backgroundSize = '60%';
-    iconElement.style.backgroundPosition = 'center';
-    iconElement.style.backgroundRepeat = 'no-repeat';
-    
-    // 设置图片URL
-    iconElement.style.backgroundImage = `url('https://xinlian132243.github.io/BCMod/Assets/LianChatButton.png')`;
-    
-    button.appendChild(iconElement);
-    
-    // 如果有未读消息，添加未读消息指示器
+    const icon = document.createElement('span');
+    icon.className = 'lc-fab-ico lc-ico lc-ico--lg';
+    icon.innerHTML = LC_ICONS.chat;
+    button.appendChild(icon);
     if (unreadCount > 0) {
-        const badge = document.createElement('div');
+        const badge = document.createElement('span');
+        badge.className = 'lc-fab-badge';
         badge.textContent = unreadCount > 99 ? '99+' : unreadCount.toString();
-        badge.style.position = 'absolute';
-        badge.style.top = '-8px';
-        badge.style.right = '-8px';
-        badge.style.backgroundColor = '#ff4d4f';
-        badge.style.color = 'white';
-        badge.style.borderRadius = '10px';
-        badge.style.padding = '0 6px';
-        badge.style.fontSize = '12px';
-        badge.style.fontWeight = 'bold';
-        badge.style.minWidth = '18px';
-        badge.style.height = '18px';
-        badge.style.display = 'flex';
-        badge.style.alignItems = 'center';
-        badge.style.justifyContent = 'center';
-        badge.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
-        
         button.appendChild(badge);
-                // 添加亮红色描边
-        button.style.boxShadow = '0 0 0 3px #ff4d4f, 0 2px 10px rgba(0, 0, 0, 0.3)';
     }
+    const ring = document.createElement('span');
+    ring.className = 'lc-fab-ring';
+    button.appendChild(ring);
 }
 
 // 约束按钮位置到可视区域内
