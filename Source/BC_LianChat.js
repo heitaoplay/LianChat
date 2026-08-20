@@ -321,10 +321,18 @@
         '  display:flex;align-items:center;justify-content:center;box-sizing:border-box;',
         '  border-radius:999px;background:var(--accent);color:var(--btn-label);',
         '  font:700 11px/1 var(--lc-font);box-shadow:0 2px 6px rgba(0,0,0,.25);border:1px solid var(--card);}',
-        /* 呼吸光环（1.8s 提示在线/未读） */
+        /* 呼吸光环（1.8s 提示在线，有未读时加速至 0.9s） */
         '.lc-fab-ring{position:absolute;inset:0;border-radius:50%;pointer-events:none;',
         '  box-shadow:0 0 0 0 var(--accent-soft);animation:lcFabRing 1.8s var(--ease) infinite;}',
-        '@keyframes lcFabRing{0%{box-shadow:0 0 0 0 var(--accent-soft)}70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}',
+        '@keyframes lcFabRing{0%{box-shadow:0 0 0 0 var(--accent-soft)}70%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}',
+        /* 未读态：光环加速 + 徽标弹入 */
+        '.lc-fab--unread .lc-fab-ring{animation:lcFabRingFast .9s var(--ease) infinite}',
+        '@keyframes lcFabRingFast{0%{box-shadow:0 0 0 0 var(--accent-soft)}50%{box-shadow:0 0 0 16px var(--accent-soft)}100%{box-shadow:0 0 0 24px transparent}}',
+        '.lc-fab--unread .lc-fab-badge{animation:lcBadgePop .36s var(--ease-spring) both}',
+        /* 来消息：按钮级呼吸光晕 + 加速光环，辨识度拉满 */
+        '.lc-fab--unread{animation:lcFabUnread 1.4s var(--ease) infinite}',
+        '@keyframes lcFabUnread{0%,100%{box-shadow:var(--shadow-inset),var(--shadow-float),0 0 0 0 var(--accent)}50%{box-shadow:var(--shadow-inset),var(--shadow-float),0 0 0 14px var(--accent-soft)}}',
+        '@keyframes lcBadgePop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35)}100%{transform:scale(1);opacity:1}}',
         /* 入场 */
         '.lc-fab--rise{animation:lcFabRise .42s var(--ease-spring) both}',
         '@keyframes lcFabRise{from{opacity:0;transform:translateY(14px) scale(.8)}to{opacity:1;transform:translateY(0) scale(1)}}',
@@ -333,6 +341,7 @@
         '  .lc-fab,.lc-fab:hover,.lc-fab:active{transition:none!important;transform:none!important}',
         '  .lc-fab-ring{animation:none!important}',
         '  .lc-fab--rise{animation:none!important}',
+        '  .lc-fab--unread,.lc-fab--unread .lc-fab-ring,.lc-fab--unread .lc-fab-badge{animation:none!important}',
         '}'
     ].join('\n');
 
@@ -447,28 +456,44 @@
     function wireFabSnap() {
         if (window.__LC_FAB_SNAP__) return;
         window.__LC_FAB_SNAP__ = true;
-        let fab = null, dragging = false, sx = 0, sy = 0, moved = false;
+        let fab = null, dragging = false, sx = 0, sy = 0, fabStartLeft = 0, fabStartTop = 0, moved = false;
         function down(e) {
             const f = document.getElementById('floatingMessageButton');
             if (!f || !f.contains(e.target)) return;
             fab = f; dragging = true; moved = false;
+            const cs = getComputedStyle(f);
+            fabStartLeft = parseFloat(cs.left) || 0;
+            fabStartTop = parseFloat(cs.top) || 0;
             const t = e.touches ? e.touches[0] : e; sx = t.clientX; sy = t.clientY;
+        }
+        function move(e) {
+            if (!dragging || !fab) return;
+            const t = e.touches ? e.touches[0] : e;
+            const dx = t.clientX - sx, dy = t.clientY - sy;
+            fab.style.transition = 'none';
+            fab.style.left = Math.max(0, Math.min(fabStartLeft + dx, window.innerWidth - fab.offsetWidth)) + 'px';
+            fab.style.top = Math.max(0, Math.min(fabStartTop + dy, window.innerHeight - fab.offsetHeight)) + 'px';
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+            moved = true;
         }
         function snapToEdge() {
             if (!fab) return;
-            const rect = fab.getBoundingClientRect();
-            const m = 12, w = rect.width, h = rect.height;
-            const dLeft = rect.left;
-            const dRight = window.innerWidth - rect.right;
-            const dTop = rect.top;
-            const dBottom = window.innerHeight - rect.bottom;
-            const min = Math.min(dLeft, dRight, dTop, dBottom);
-            let left, top;
-            if (min === dLeft) { left = m; top = Math.max(m, Math.min(rect.top, window.innerHeight - h - m)); }
-            else if (min === dRight) { left = window.innerWidth - w - m; top = Math.max(m, Math.min(rect.top, window.innerHeight - h - m)); }
-            else if (min === dTop) { top = m; left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); }
-            else { top = window.innerHeight - h - m; left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); }
-            fab.style.transition = 'left .28s var(--ease),top .28s var(--ease),right .28s var(--ease),bottom .28s var(--ease)';
+            // 使用 style left/top 而非 getBoundingClientRect，避免 hover/active transform 干扰
+            var curLeft = parseFloat(fab.style.left) || 0;
+            var curTop = parseFloat(fab.style.top) || 0;
+            var w = fab.offsetWidth, h = fab.offsetHeight;
+            var m = 12;
+            var dLeft = curLeft - m;
+            var dRight = window.innerWidth - curLeft - w - m;
+            var dTop = curTop - m;
+            var dBottom = window.innerHeight - curTop - h - m;
+            var left, top;
+            if (dLeft <= dRight && dLeft <= dTop && dLeft <= dBottom) { left = m; top = curTop; }
+            else if (dRight <= dTop && dRight <= dBottom) { left = window.innerWidth - w - m; top = curTop; }
+            else if (dTop <= dBottom) { top = m; left = curLeft; }
+            else { top = window.innerHeight - h - m; left = curLeft; }
+            fab.style.transition = 'left .28s var(--ease),top .28s var(--ease)';
             fab.style.left = left + 'px';
             fab.style.top = top + 'px';
             fab.style.right = 'auto';
@@ -483,15 +508,23 @@
         function up(e) {
             if (!dragging) return;
             dragging = false;
-            const t = e.changedTouches ? e.changedTouches[0] : e;
-            if (Math.abs((t.clientX || sx) - sx) > 3 || Math.abs((t.clientY || sy) - sy) > 3) moved = true;
             if (!moved || !fab) return;
             // 等插件 stopButtonDrag 存完位再动画
             setTimeout(snapToEdge, 0);
         }
-        _fabSnapHandlers = { down: down, up: up };
+        function cleanup() {
+            document.removeEventListener('mousedown', down, true);
+            document.removeEventListener('touchstart', down, true);
+            document.removeEventListener('mousemove', move, true);
+            document.removeEventListener('touchmove', move, true);
+            document.removeEventListener('mouseup', up, true);
+            document.removeEventListener('touchend', up, true);
+        }
+        _fabSnapHandlers = { down: down, move: move, up: up, cleanup: cleanup };
         document.addEventListener('mousedown', down, true);
         document.addEventListener('touchstart', down, true);
+        document.addEventListener('mousemove', move, true);
+        document.addEventListener('touchmove', move, true);
         document.addEventListener('mouseup', up, true);
         document.addEventListener('touchend', up, true);
     }
@@ -7383,10 +7416,10 @@ function createFloatingMessageButton() {
     buttonContainer.style.position = 'fixed';
     buttonContainer.style.zIndex = FloatZindex;
     
-    // 设置初始位置（右下角）
+    // 设置初始位置（统一 left/top 定位，与 STEP2 四边吸附一致，避免 right/bottom 冲突导致点击后跳位）
     const initialPosition = getStoredButtonPosition();
-    buttonContainer.style.right = initialPosition.right;
-    buttonContainer.style.bottom = initialPosition.bottom;
+    buttonContainer.style.left = initialPosition.left;
+    buttonContainer.style.top = initialPosition.top;
     
     // 更新按钮状态
     updateFloatingButtonState();
@@ -7418,11 +7451,8 @@ function createFloatingMessageButton() {
         // 记录拖拽开始时按钮的位置
         const button = document.getElementById('floatingMessageButton');
         if (button) {
-            const rect = button.getBoundingClientRect();
-            const currentRight = parseFloat(button.style.right) || 0;
-            const currentBottom = parseFloat(button.style.bottom) || 0;
-            buttonStartLeft = window.innerWidth - currentRight - rect.width;
-            buttonStartTop = window.innerHeight - currentBottom - rect.height;
+            buttonStartLeft = parseFloat(button.style.left) || 0;
+            buttonStartTop = parseFloat(button.style.top) || 0;
         }
         
         this.style.transition = 'none'; // 拖动时禁用过渡效果
@@ -7446,11 +7476,8 @@ function createFloatingMessageButton() {
         // 记录拖拽开始时按钮的位置
         const button = document.getElementById('floatingMessageButton');
         if (button) {
-            const rect = button.getBoundingClientRect();
-            const currentRight = parseFloat(button.style.right) || 0;
-            const currentBottom = parseFloat(button.style.bottom) || 0;
-            buttonStartLeft = window.innerWidth - currentRight - rect.width;
-            buttonStartTop = window.innerHeight - currentBottom - rect.height;
+            buttonStartLeft = parseFloat(button.style.left) || 0;
+            buttonStartTop = parseFloat(button.style.top) || 0;
         }
         
         this.style.transition = 'none'; // 拖动时禁用过渡效果
@@ -7502,9 +7529,9 @@ function createFloatingMessageButton() {
         const boundedLeft = Math.max(0, Math.min(newLeft, maxX));
         const boundedTop = Math.max(0, Math.min(newTop, maxY));
         
-        // 更新位置（转换为right和bottom值）
-        button.style.right = `${window.innerWidth - boundedLeft - buttonWidth}px`;
-        button.style.bottom = `${window.innerHeight - boundedTop - buttonHeight}px`;
+        // 更新位置（left/top 定位，与 STEP2 四边吸附一致）
+        button.style.left = `${boundedLeft}px`;
+        button.style.top = `${boundedTop}px`;
         
         // 触摸事件时防止页面滚动
         if (isTouchEvent) {
@@ -7521,8 +7548,8 @@ function createFloatingMessageButton() {
                 
                 // 存储按钮位置
                 storeButtonPosition({
-                    right: button.style.right,
-                    bottom: button.style.bottom
+                    left: button.style.left,
+                    top: button.style.top
                 });
                 
                 // 只有在没有移动的情况下才触发点击事件
@@ -7589,6 +7616,8 @@ function updateFloatingButtonState() {
     const unreadCount = MessageModule.getTotalUnreadCount();
     // 打开态切换为糖果强调色（由 .lc-fab--open 类提供，零内联）
     button.classList.toggle('lc-fab--open', !!MessageModule.isMessageDialogVisible());
+    // 来消息时启用醒目脉冲（呼吸光晕 + 加速光环 + 徽标弹入），零内联
+    button.classList.toggle('lc-fab--unread', unreadCount > 0);
 
     // 清空并重建为 SVG 图标 + 呼吸环 + 未读徽标（.lc-* 类，零内联色值）
     button.innerHTML = '';
@@ -7615,11 +7644,9 @@ function constrainButtonToViewport(button) {
     const buttonWidth = rect.width;
     const buttonHeight = rect.height;
     
-    // 获取当前按钮位置
-    const currentRight = parseFloat(button.style.right) || 0;
-    const currentBottom = parseFloat(button.style.bottom) || 0;
-    const currentLeft = window.innerWidth - currentRight - buttonWidth;
-    const currentTop = window.innerHeight - currentBottom - buttonHeight;
+    // 获取当前按钮位置（left/top 定位）
+    const currentLeft = parseFloat(button.style.left) || 0;
+    const currentTop = parseFloat(button.style.top) || 0;
     
     // 计算边界
     const maxX = window.innerWidth - buttonWidth;
@@ -7631,12 +7658,12 @@ function constrainButtonToViewport(button) {
     
     // 如果位置需要调整，更新按钮位置
     if (boundedLeft !== currentLeft || boundedTop !== currentTop) {
-        button.style.right = `${window.innerWidth - boundedLeft - buttonWidth}px`;
-        button.style.bottom = `${window.innerHeight - boundedTop - buttonHeight}px`;
+        button.style.left = `${boundedLeft}px`;
+        button.style.top = `${boundedTop}px`;
         // 重新存储调整后的位置
         storeButtonPosition({
-            right: button.style.right,
-            bottom: button.style.bottom
+            left: button.style.left,
+            top: button.style.top
         });
     }
 }
@@ -7645,76 +7672,33 @@ function constrainButtonToViewport(button) {
 function updateButtonPosition() {
     const button = document.getElementById('floatingMessageButton');
     if (!button) return;
-    
-    // 获取MainCanvas的位置和尺寸
-    const canvas = document.getElementById('MainCanvas');
-    if (!canvas) {
-        // 如果没有MainCanvas，直接约束到视口
-        constrainButtonToViewport(button);
-        return;
-    }
-    
-    const canvasRect = canvas.getBoundingClientRect();
-    const storedPosition = getStoredButtonPosition();
-    
-    // 计算相对于MainCanvas的位置
-    // 将right和bottom转换为相对于MainCanvas右下角的百分比
-    const rightPercent = parseFloat(storedPosition.rightPercent || '5');
-    const bottomPercent = parseFloat(storedPosition.bottomPercent || '5');
-    
-    // 计算实际像素位置
-    const rightPx = (rightPercent / 100) * canvasRect.width;
-    const bottomPx = (bottomPercent / 100) * canvasRect.height;
-    
-    // 设置按钮位置，确保不超出MainCanvas
-    button.style.right = `${window.innerWidth - (canvasRect.right - rightPx)}px`;
-    button.style.bottom = `${window.innerHeight - (canvasRect.bottom - bottomPx)}px`;
-    
-    // 确保按钮在可视区域内（防止横竖屏切换时转出屏幕）
+    // left/top 定位：窗口变化时仅做视口内约束（防横竖屏/缩放转出屏幕）
     constrainButtonToViewport(button);
 }
 
-// 存储按钮位置
+// 存储按钮位置（统一 left/top，与 STEP2 四边吸附共用同一快照键，避免定位模型冲突）
 function storeButtonPosition(position) {
-    // 获取MainCanvas的位置和尺寸
-    const canvas = document.getElementById('MainCanvas');
-    if (!canvas) {
-        localStorage.setItem('floatingMessageButtonPosition', JSON.stringify(position));
-        return;
-    }
-    
-    const canvasRect = canvas.getBoundingClientRect();
-    
-    // 计算按钮位置相对于MainCanvas右下角的百分比
-    const rightPx = parseFloat(position.right);
-    const bottomPx = parseFloat(position.bottom);
-    
-    // 计算MainCanvas右下角坐标
-    const canvasRight = canvasRect.right;
-    const canvasBottom = canvasRect.bottom;
-    
-    // 计算按钮到MainCanvas右下角的距离
-    const distanceToRight = canvasRight - (window.innerWidth - rightPx);
-    const distanceToBottom = canvasBottom - (window.innerHeight - bottomPx);
-    
-    // 转换为百分比
-    const rightPercent = (distanceToRight / canvasRect.width) * 100;
-    const bottomPercent = (distanceToBottom / canvasRect.height) * 100;
-    
-    // 存储百分比位置
-    localStorage.setItem('floatingMessageButtonPosition', JSON.stringify({
-        right: position.right,
-        bottom: position.bottom,
-        rightPercent: rightPercent.toFixed(2),
-        bottomPercent: bottomPercent.toFixed(2)
-    }));
+    try {
+        localStorage.setItem('floatingMessageButtonPositionSnap', JSON.stringify({
+            left: parseFloat(position.left) || 0,
+            top: parseFloat(position.top) || 0
+        }));
+    } catch (e) {}
 }
 
-// 获取存储的按钮位置
+// 获取存储的按钮位置（统一 left/top；无记录时默认右下角）
 function getStoredButtonPosition() {
-    const defaultPosition = { right: '20px', bottom: '20px', rightPercent: '5', bottomPercent: '5' };
-    const stored = localStorage.getItem('floatingMessageButtonPosition');
-    return stored ? JSON.parse(stored) : defaultPosition;
+    try {
+        const stored = localStorage.getItem('floatingMessageButtonPositionSnap');
+        if (stored) {
+            const p = JSON.parse(stored);
+            if (typeof p.left === 'number' && typeof p.top === 'number') {
+                return { left: p.left + 'px', top: p.top + 'px' };
+            }
+        }
+    } catch (e) {}
+    // 默认右下角（58×58 按钮，距边 20px）
+    return { left: (window.innerWidth - 78) + 'px', top: (window.innerHeight - 78) + 'px' };
 }
 
 // 添加一个全局变量来存储定时器ID
