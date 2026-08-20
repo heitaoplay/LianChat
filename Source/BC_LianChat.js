@@ -27,7 +27,7 @@
         name: MOD_NAME,
         fullName: MOD_FULL_NAME,
         version: MOD_VERSION
-    });
+    }, { allowReplace: true });
 
     // =======================================================================================
     const w = window;
