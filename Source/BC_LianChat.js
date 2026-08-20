@@ -1114,7 +1114,32 @@
 
             /* === 右侧标签折叠时的平滑宽度 === */
             '#LC-Message-SenderList{transition:width .22s var(--ease),min-width .22s var(--ease)}',
-            '#LC-Message-RightContainer{transition:width .22s var(--ease),flex .22s var(--ease)}'
+            '#LC-Message-RightContainer{transition:width .22s var(--ease),flex .22s var(--ease)}',
+
+            /* === 悬浮按钮：彻底消除点击蓝色高亮（tap-highlight + :active 背景保护）=== */
+            '.lc-fab,.lc-fab *{-webkit-tap-highlight-color:transparent!important}',
+            '.lc-fab:active{background:var(--card)!important}',
+            '.lc-fab--open:active{background:var(--accent)!important}',
+
+            /* === 好友/房间/大厅 tab 切换组重设计（#e6f4ff 浅蓝 → 暖色）=== */
+            '.lc-add-sender .search-container>div:nth-of-type(1){background:var(--card)!important;border:1px solid var(--seam)!important;border-radius:10px!important;padding:2px!important;overflow:hidden!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button{background:transparent!important;color:var(--ink-2)!important;border-radius:8px!important;transition:background .2s var(--ease),color .2s var(--ease)!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button[style*="rgb(230, 244, 255)"]{background:var(--accent-soft)!important;color:var(--accent)!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button[style*="rgb(255, 255, 255)"]{background:transparent!important;color:var(--ink-2)!important}',
+            '.lc-add-sender .search-container>div:nth-of-type(1) button:hover{background:var(--bg-sink)!important;color:var(--ink)!important}',
+
+            /* === 在线人数按钮（lc-online-btn，SVG 人像 + 数字）=== */
+            '.lc-online-btn{width:36px;height:36px;border:1px solid var(--seam);border-radius:10px;background:var(--card);color:var(--ink-2);cursor:pointer;flex:none;transition:background .15s var(--ease),color .15s var(--ease),transform .15s var(--ease)}',
+            '.lc-online-btn:hover{background:var(--accent-soft);color:var(--accent)}',
+            '.lc-online-btn:active{transform:scale(.94)}',
+            '.lc-online-btn .lc-online-count{font-size:12px;font-weight:700;color:inherit;line-height:1}',
+
+            /* === 置顶按钮（lc-pin-active）=== */
+            '.lc-pin-active{background:var(--accent-soft)!important;color:var(--accent)!important}',
+
+            /* === 添加发送者列表项切换动效（淡入 + 上滑）=== */
+            '.lc-add-sender .add-sender-content-container>div{animation:lcListItemIn .22s var(--ease) both}',
+            '@keyframes lcListItemIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}'
         ].join('\n');
 
         function injectStep7Style() {
@@ -1218,6 +1243,26 @@
         }
         patchPencilButton();
 
+        // ── 3.5) 在线人数按钮重新设计（SVG 人像 + class，热注入下原始函数不生效）
+        function patchOnlineButton() {
+            const searchInput = document.getElementById('LC-Message-SenderSearchInput');
+            if (!searchInput) return;
+            const btn = searchInput.nextElementSibling;
+            if (!btn || btn.tagName !== 'BUTTON' || btn.dataset.lcPatched === 'online') return;
+            btn.dataset.lcPatched = 'online';
+            btn.classList.add('lc-online-btn');
+            ['width', 'height', 'border', 'borderRadius', 'backgroundColor', 'fontSize', 'color'].forEach(function (p) { try { btn.style[p] = ''; } catch (e) {} });
+            const icon = btn.querySelector('span');
+            if (icon) {
+                icon.className = 'lc-ico lc-ico--md';
+                icon.style.cssText = '';
+                if (typeof LC_ICONS !== 'undefined' && LC_ICONS.person) icon.innerHTML = LC_ICONS.person;
+            }
+            const spans = btn.querySelectorAll('span');
+            if (spans[1]) { spans[1].className = 'lc-online-count'; spans[1].style.cssText = ''; }
+        }
+        patchOnlineButton();
+
         // ── 4) 悬浮按钮四边吸附拖拽
         // 说明：四边吸附已由 STEP2 的 wireFabSnap() 统一处理（拖拽释放吸附 + 加载时从
         // localStorage 恢复位置），此处不再克隆/替换 FAB，避免与 STEP2 的 reskin/observe 体系冲突。
@@ -1245,6 +1290,7 @@
                 reorderHeader();
                 markAddSender();
                 patchPencilButton();
+                patchOnlineButton();
             });
             _step7Obs.observe(document.body, { childList: true, subtree: true });
         }
@@ -3346,8 +3392,9 @@ class RoomItem {
         this.IsCurrentRoom = room.Name == ChatRoomData?.Name;
 
         this.pinButton.textContent = isPinned ? '★' : '☆';
-        this.pinButton.style.background = isPinned ? '#e6f4ff' : '#f5f5f5';
-        this.pinButton.style.color = isPinned ? '#2196f3' : '#888';
+        this.pinButton.classList.toggle('lc-pin-active', isPinned);
+        this.pinButton.style.background = '';
+        this.pinButton.style.color = '';
         this.pinButton.style.width = '30px';
 
         this.element.style.cursor = 'pointer';          // 恢复鼠标样式
@@ -3853,28 +3900,22 @@ class RoomItemPool {
                 updateSenderList();
             });
 
-            // 添加加号按钮
+            // 添加"在线人数"按钮（重新设计：SVG 人像图标 + 数字，lc-online-btn 类）
             const friendButton = document.createElement('button');
-            friendButton.style.width = '32px';
-            friendButton.style.height = '32px';
-            friendButton.style.border = '1px solid #ddd';
-            friendButton.style.borderRadius = '4px';
-            friendButton.style.cursor = 'pointer';
-            friendButton.style.backgroundColor = '#f5f5f5';
+            friendButton.className = 'lc-online-btn';
+            friendButton.type = 'button';
             friendButton.style.display = 'flex';
             friendButton.style.alignItems = 'center';
             friendButton.style.justifyContent = 'center';
-            friendButton.style.fontSize = '10px'; // 调小字体
-            friendButton.style.gap = '2px'; // 图标和数字间距
+            friendButton.style.gap = '3px';
 
-            // 创建图标和数字显示
+            // SVG 人像图标（替换 👤 emoji）
             const iconSpan = document.createElement('span');
-            iconSpan.textContent = '👤';
-            iconSpan.style.fontSize = '12px';
+            iconSpan.className = 'lc-ico lc-ico--md';
+            iconSpan.innerHTML = (typeof LC_ICONS !== 'undefined' && LC_ICONS.person) ? LC_ICONS.person : '👤';
 
             const countSpan = document.createElement('span');
-            countSpan.style.fontSize = '10px';
-            countSpan.style.color = '#666';
+            countSpan.className = 'lc-online-count';
 
             friendButton.appendChild(iconSpan);
             friendButton.appendChild(countSpan);
@@ -4566,13 +4607,10 @@ class RoomItemPool {
                 function updateSwitchStyle() {
                     modeButtons.forEach(({ mode }) => {
                         const btn = buttonElements[mode];
-                        if (currentMode === mode) {
-                            btn.style.background = '#e6f4ff';
-                            btn.style.color = 'black';
-                        } else {
-                            btn.style.background = 'white';
-                            btn.style.color = 'black';
-                        }
+                        const active = (currentMode === mode);
+                        btn.classList.toggle('lc-tab-active', active);
+                        btn.style.background = '';
+                        btn.style.color = '';
                     });
                 }
 
